@@ -1,0 +1,299 @@
+<?php
+
+namespace App\Entity;
+
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\OpenApi\Model\Operation;
+use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Repository\GareRepository;
+use App\State\EntrepriseInjectionProcessor;
+use App\State\SoftDeleteProcessor;
+use App\State\UpdatedbyProcessor;
+use App\Validator\UniquePerEntreprise;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
+use Doctrine\DBAL\Types\Types;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Validator\Constraints as Assert;
+use Symfony\Component\Serializer\Attribute\Groups;
+
+#[ORM\Entity(repositoryClass: GareRepository::class)]
+#[UniquePerEntreprise(
+    fields: ['chefgare', 'ville', 'libelle', 'contact1'],
+    message: 'L\'enregistrement existe déjà pour votre entreprise'
+)]
+#[ApiResource(
+    security: "is_granted('IS_AUTHENTICATED_FULLY')",
+    normalizationContext: ['groups' => ['read:Gare', 'read:Base'], 'skip_null_values' => false],
+    denormalizationContext: ['groups' => ['write:Gare']],
+    paginationEnabled: false,
+    order: ['createdAt' => 'DESC'],
+    operations: [
+        new GetCollection(
+            security: "is_granted('VOIR', 'Gare') or is_granted('ROLE_USER')",
+            openapi: new Operation(
+                summary: 'Liste des gares',
+                description: 'Permet de voir la liste des gares',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Get(
+            security: "is_granted('VOIR', object)",
+            requirements: ['id' => '\d+'],
+            normalizationContext: ['groups' => ['read:Gare', 'read:Gare:item']],
+            openapi: new Operation(
+                summary: 'La gare',
+                description: 'Permet de voir une gare',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Post(
+            security: "is_granted('CREER', 'Gare')",
+            processor: EntrepriseInjectionProcessor::class,
+            openapi: new Operation(
+                summary: 'Création de la gare',
+                description: 'Permet de créer une gare',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
+            security: "is_granted('MODIFIER', object)",
+            requirements: ['id' => '\d+'],
+            processor: UpdatedbyProcessor::class,
+            openapi: new Operation(
+                summary: 'Modification de la gare',
+                description: 'Permet de modifier une gare',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
+            security: "is_granted('SUPPRIMER', object)",
+            uriTemplate: '/gares/{id}/remove',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: SoftDeleteProcessor::class,
+            openapi: new Operation(
+                summary: 'Mise en corbeille de la gare',
+                description: 'Permet de mettre une gare en corbeille',
+                security: [['bearerAuth' => []]]
+            )
+        )
+    ],
+    openapi: new Operation(
+        security: [['bearerAuth' => []]]
+    )
+)]
+class Gare extends EntityBase implements EntrepriseOwnedInterface
+{
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    #[Groups(['read:Gare', 'read:Courrier'])]
+    private ?int $id = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier'])]
+    #[Assert\NotBlank]
+    #[Assert\Length(min: 2)]
+    private ?string $chefgare = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier'])]
+    #[Assert\Length(min: 2)]
+    private ?string $ville = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier'])]
+    #[Assert\NotBlank]
+    #[Assert\Length(min: 2)]
+    private ?string $libelle = null;
+
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    #[Groups(['read:Gare:item', 'write:Gare'])]
+    private ?string $description = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier'])]
+    #[Assert\NotBlank]
+    #[Assert\Length(min: 3)]
+    private ?string $contact1 = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier'])]
+    private ?string $contact2 = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $identreprise = null;
+
+    /**
+     * @var Collection<int, Ticket>
+     */
+    #[ORM\OneToMany(targetEntity: Ticket::class, mappedBy: 'gare')]
+    private Collection $tickets;
+
+    /**
+     * @var Collection<int, Courrier>
+     */
+    #[ORM\OneToMany(targetEntity: Courrier::class, mappedBy: 'garedepart')]
+    private Collection $courriers;
+
+    public function __construct()
+    {
+        $this->tickets = new ArrayCollection();
+        $this->courriers = new ArrayCollection();
+    }
+
+    public function getId(): ?int
+    {
+        return $this->id;
+    }
+
+    public function getChefgare(): ?string
+    {
+        return $this->chefgare;
+    }
+
+    public function setChefgare(string $chefgare): static
+    {
+        $this->chefgare = $chefgare;
+
+        return $this;
+    }
+
+    public function getVille(): ?string
+    {
+        return $this->ville;
+    }
+
+    public function setVille(string $ville): static
+    {
+        $this->ville = $ville; // 'strtoupper(trim($ville))'
+
+        return $this;
+    }
+
+    public function getLibelle(): ?string
+    {
+        return $this->libelle;
+    }
+
+    public function setLibelle(string $libelle): static
+    {
+        $this->libelle = $libelle;
+
+        return $this;
+    }
+
+    public function getDescription(): ?string
+    {
+        return $this->description;
+    }
+
+    public function setDescription(?string $description): static
+    {
+        $this->description = $description;
+
+        return $this;
+    }
+
+    public function getContact1(): ?string
+    {
+        return $this->contact1;
+    }
+
+    public function setContact1(string $contact1): static
+    {
+        $this->contact1 = $contact1;
+
+        return $this;
+    }
+
+    public function getContact2(): ?string
+    {
+        return $this->contact2;
+    }
+
+    public function setContact2(?string $contact2): static
+    {
+        $this->contact2 = $contact2;
+
+        return $this;
+    }
+
+    public function getIdentreprise(): ?int
+    {
+        return $this->identreprise;
+    }
+
+    public function setIdentreprise(?int $identreprise): static
+    {
+        $this->identreprise = $identreprise;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Ticket>
+     */
+    public function getTickets(): Collection
+    {
+        return $this->tickets;
+    }
+
+    public function addTicket(Ticket $ticket): static
+    {
+        if (!$this->tickets->contains($ticket)) {
+            $this->tickets->add($ticket);
+            $ticket->setGare($this);
+        }
+
+        return $this;
+    }
+
+    public function removeTicket(Ticket $ticket): static
+    {
+        if ($this->tickets->removeElement($ticket)) {
+            // set the owning side to null (unless already changed)
+            if ($ticket->getGare() === $this) {
+                $ticket->setGare(null);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, Courrier>
+     */
+    public function getCourriers(): Collection
+    {
+        return $this->courriers;
+    }
+
+    public function addCourrier(Courrier $courrier): static
+    {
+        if (!$this->courriers->contains($courrier)) {
+            $this->courriers->add($courrier);
+            $courrier->setGaredepart($this);
+        }
+
+        return $this;
+    }
+
+    public function removeCourrier(Courrier $courrier): static
+    {
+        if ($this->courriers->removeElement($courrier)) {
+            // set the owning side to null (unless already changed)
+            if ($courrier->getGaredepart() === $this) {
+                $courrier->setGaredepart(null);
+            }
+        }
+
+        return $this;
+    }
+
+}

@@ -1,0 +1,331 @@
+<?php
+
+namespace App\Entity;
+
+use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\OpenApi\Model\Operation;
+use App\Domain\Enum\BagageStatus;
+use App\Entity\Dto\BagageInput;
+use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Repository\BagageRepository;
+use App\State\BagageProcessor;
+use App\State\EmbarquerBagageProcessor;
+use App\State\PerduBagageProcessor;
+use App\State\SoftDeleteProcessor;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
+
+#[ORM\Entity(repositoryClass: BagageRepository::class)]
+#[ApiResource(
+    security: "is_granted('IS_AUTHENTICATED_FULLY')",
+    normalizationContext: ['groups' => ['read:Bagage', 'read:Base'], 'skip_null_values' => false],
+    paginationItemsPerPage: 25,
+    paginationClientItemsPerPage: true,
+    order: ['createdAt' => 'DESC'],
+    operations: [
+        new GetCollection(
+            security: "is_granted('VOIR', 'Bagage') or is_granted('ROLE_USER')",
+            openapi: new Operation(
+                summary: 'Liste des bagages',
+                description: 'Permet de voir la liste des bagages',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Get(
+            security: "is_granted('VOIR', object)",
+            requirements: ['id' => '\d+'],
+            openapi: new Operation(
+                summary: 'Un bagage',
+                description: 'Permet de voir un bagage',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Post(
+            security: "is_granted('CREER', 'Bagage')",
+            input: BagageInput::class,
+            processor: BagageProcessor::class,
+            denormalizationContext: ['groups' => ['write:BagageInput']],
+            openapi: new Operation(
+                summary: 'Enregistrement d\'un bagage',
+                description: 'Permet de créer un bagage',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
+            security: "is_granted('MODIFIER', object)",
+            requirements: ['id' => '\d+'],
+            input: BagageInput::class,
+            processor: BagageProcessor::class,
+            denormalizationContext: ['groups' => ['write:BagageInput']],
+            openapi: new Operation(
+                summary: 'Modification d\'un bagage',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        /*
+            new Patch(
+                security: "is_granted('MODIFIER', object)",
+                uriTemplate: '/bagages/{id}/embarquer',
+                requirements: ['id' => '\d+'],
+                input: false,
+                processor: EmbarquerBagageProcessor::class,
+                openapi: new Operation(
+                    summary: 'Embarquer un bagage',
+                    description: 'Marque le bagage comme embarqué sur le voyage',
+                    security: [['bearerAuth' => []]]
+                )
+            ),
+        */
+        new Patch(
+            security: "is_granted('MODIFIER', object)",
+            uriTemplate: '/bagages/{id}/perdu',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: PerduBagageProcessor::class,
+            openapi: new Operation(
+                summary: 'Déclarer un bagage perdu',
+                description: 'Déclare le bagage comme perdu',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
+            security: "is_granted('SUPPRIMER', object)",
+            uriTemplate: '/bagages/{id}/remove',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: SoftDeleteProcessor::class,
+            openapi: new Operation(
+                summary: 'Suppression d\'un bagage',
+                description: 'Permet de supprimer un bagage',
+                security: [['bearerAuth' => []]]
+            )
+        )
+    ],
+    openapi: new Operation(
+        security: [['bearerAuth' => []]]
+    )
+)]
+#[ApiFilter(SearchFilter::class, properties: [
+    'codebagage' => 'partial',
+    'voyage.id' => 'exact',
+    'statut' => 'exact'
+])]
+#[ApiFilter(OrderFilter::class, properties: [
+    'id',
+    'codebagage',
+    'poids',
+    'montant',
+    'statut',
+    'createdAt'
+])]
+class Bagage extends EntityBase implements EntrepriseOwnedInterface
+{
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?int $id = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?string $codebagage = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?string $nomclient = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?string $contactclient = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?string $nature = null; // valise, sac, carton, vélo..
+
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?string $type = null; // LEGER, LOURD, VOLUMINEUX, FRAGILE
+
+    #[ORM\Column]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?int $poids = null; // La base du calcul
+
+    #[ORM\Column]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?int $montant = null; // On le calcule via 'Tarifbagage' ou forcé manuellement
+
+    #[ORM\Column]
+    #[Groups(['read:Bagage'])]
+    private ?bool $montantforce = false; // 'true' si l'agent a modifié le montant calculé
+
+    #[ORM\ManyToOne(inversedBy: 'bagages')]
+    #[Groups(['read:Bagage'])]
+    private ?Voyage $voyage = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['read:Bagage', 'read:Voyage'])]
+    private ?string $statut = BagageStatus::STATUT_ENREGISTRE->value; // ENREGISTRE, EMBARQUE, LIVRE, PERDU
+
+    #[ORM\Column(nullable: true)]
+    private ?int $identreprise = null;
+
+    #[ORM\ManyToOne(inversedBy: 'bagages')]
+    #[Groups(['read:Bagage'])]
+    private ?Tarifbagage $tarifbagage = null; // NULL si montant forcé sans tarif correspondant et on le conserve pour l'historique même si la grille change
+
+    public function getId(): ?int
+    {
+        return $this->id;
+    }
+
+    public function getCodebagage(): ?string
+    {
+        return $this->codebagage;
+    }
+
+    public function setCodebagage(string $codebagage): static
+    {
+        $this->codebagage = $codebagage;
+
+        return $this;
+    }
+
+    public function getNomclient(): ?string
+    {
+        return $this->nomclient;
+    }
+
+    public function setNomclient(string $nomclient): static
+    {
+        $this->nomclient = $nomclient;
+
+        return $this;
+    }
+
+    public function getContactclient(): ?string
+    {
+        return $this->contactclient;
+    }
+
+    public function setContactclient(string $contactclient): static
+    {
+        $this->contactclient = $contactclient;
+
+        return $this;
+    }
+
+    public function getNature(): ?string
+    {
+        return $this->nature;
+    }
+
+    public function setNature(string $nature): static
+    {
+        $this->nature = $nature;
+
+        return $this;
+    }
+
+    public function getType(): ?string
+    {
+        return $this->type;
+    }
+
+    public function setType(?string $type): static
+    {
+        $this->type = $type;
+
+        return $this;
+    }
+
+    public function getPoids(): ?int
+    {
+        return $this->poids;
+    }
+
+    public function setPoids(int $poids): static
+    {
+        $this->poids = $poids;
+
+        return $this;
+    }
+
+    public function getMontant(): ?int
+    {
+        return $this->montant;
+    }
+
+    public function setMontant(int $montant): static
+    {
+        $this->montant = $montant;
+
+        return $this;
+    }
+
+    public function isMontantforce(): ?bool
+    {
+        return $this->montantforce;
+    }
+
+    public function setMontantforce(bool $montantforce): static
+    {
+        $this->montantforce = $montantforce;
+
+        return $this;
+    }
+
+    public function getVoyage(): ?Voyage
+    {
+        return $this->voyage;
+    }
+
+    public function setVoyage(?Voyage $voyage): static
+    {
+        $this->voyage = $voyage;
+
+        return $this;
+    }
+
+    public function getStatut(): ?string
+    {
+        return $this->statut;
+    }
+
+    public function setStatut(?string $statut): static
+    {
+        $this->statut = $statut;
+
+        return $this;
+    }
+
+    public function getIdentreprise(): ?int
+    {
+        return $this->identreprise;
+    }
+
+    public function setIdentreprise(?int $identreprise): static
+    {
+        $this->identreprise = $identreprise;
+
+        return $this;
+    }
+
+    public function getTarifbagage(): ?Tarifbagage
+    {
+        return $this->tarifbagage;
+    }
+
+    public function setTarifbagage(?Tarifbagage $tarifbagage): static
+    {
+        $this->tarifbagage = $tarifbagage;
+
+        return $this;
+    }
+}

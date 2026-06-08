@@ -1,0 +1,271 @@
+<?php
+
+namespace App\Repository;
+
+use App\Entity\Courrier;
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
+
+/**
+ * @extends ServiceEntityRepository<Courrier>
+ */
+class CourrierRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
+    {
+        parent::__construct($registry, Courrier::class);
+    }
+
+    /* Statistiques
+     */
+    public function recettesTotales(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): float
+    {
+        $row = $this->createQueryBuilder('c')
+            ->select('COALESCE(SUM(c.montant), 0) AS total')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.deletedAt IS NULL')
+            ->andWhere('(
+                (c.modepaiement = :envoi AND c.createdAt >= :debut AND c.createdAt <= :fin)
+                OR
+                (c.modepaiement = :reception AND c.statut = :livre AND c.datepaiement >= :debut AND c.datepaiement <= :fin)
+            )')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->setParameter('envoi', 'ENVOI')
+            ->setParameter('reception', 'RECEPTION')
+            ->setParameter('livre', 'LIVRE')
+            ->getQuery()
+            ->getSingleResult();
+
+        return round((float)($row['total'] ?? 0), 2);
+    }
+
+    public function recettesParAgent(
+        \DateTimeImmutable $debut,
+        \DateTimeImmutable $fin,
+        int $identreprise
+    ): array
+    {
+        $envois = $this->createQueryBuilder('c')
+            ->select('c.createdBy AS agentid, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.modepaiement = :envoi')
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('envoi', 'ENVOI')
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('c.createdBy')
+            ->getQuery()
+            ->getArrayResult();
+
+        $receptions = $this->createQueryBuilder('c')
+            ->select('c.updatedBy AS agentid, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.modepaiement = :reception')
+            ->andWhere('c.statut = :livre')
+            ->andWhere('c.datepaiement >= :debut')
+            ->andWhere('c.datepaiement <= :fin')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('reception', 'RECEPTION')
+            ->setParameter('livre', 'LIVRE')
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('c.updatedBy')
+            ->getQuery()
+            ->getArrayResult();
+
+        $index = [];
+        foreach ($envois as $row) {
+            $id = $row['agentid'];
+            $index[$id]['agentid']     = $id;
+            $index[$id]['nbcourriers'] = (int)$row['nbcourriers'];
+            $index[$id]['montant']     = (float)$row['montant'];
+        }
+        foreach ($receptions as $row) {
+            $id = $row['agentid'];
+            $index[$id]['agentid']     = $id;
+            $index[$id]['nbcourriers'] = ($index[$id]['nbcourriers'] ?? 0) + (int)$row['nbcourriers'];
+            $index[$id]['montant']     = ($index[$id]['montant'] ?? 0) + (float)$row['montant'];
+        }
+
+        return array_values($index);
+    }
+
+    public function recettesParJourDetail(
+        \DateTimeImmutable $debut,
+        \DateTimeImmutable $fin,
+        int $identreprise
+    ): array
+    {
+        $envois = $this->createQueryBuilder('c')
+            ->select('DATE(c.createdAt) AS label, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.modepaiement = :envoi')
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('envoi', 'ENVOI')
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('label')
+            ->getQuery()
+            ->getArrayResult()
+        ; /*
+            - La recette comptabilisé à la création
+        */
+        $receptions = $this->createQueryBuilder('c')
+            ->select('DATE(c.datepaiement) AS label, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.modepaiement = :reception')
+            ->andWhere('c.statut = :livre')
+            ->andWhere('c.datepaiement >= :debut')
+            ->andWhere('c.datepaiement <= :fin')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('reception', 'RECEPTION')
+            ->setParameter('livre', 'LIVRE')
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('label')
+            ->getQuery()
+            ->getArrayResult()
+        ; /*
+            - La recette comptabilisé à la livraison
+        */
+        $index = [];
+        foreach($envois as $row) {
+            $index[$row['label']]['montant'] = (float)$row['montant'];
+            $index[$row['label']]['nbcourriers'] = (int)$row['nbcourriers'];
+        }
+        foreach($receptions as $row) {
+            $index[$row['label']]['montant'] = ($index[$row['label']]['montant'] ?? 0) + (float)$row['montant'];
+            $index[$row['label']]['nbcourriers'] = ($index[$row['label']]['nbcourriers'] ?? 0) + (int)$row['nbcourriers'];
+        }
+        ksort($index); /*
+            - La fusion par jour
+        */
+        return array_map(
+            fn($label, $vals) => ['label' => $label, 'montant' => $vals['montant'], 'nbcourriers' => $vals['nbcourriers']],
+            array_keys($index),
+            array_values($index)
+        );
+    }
+
+    /* Statistiques Courrier
+     */
+    public function countParStatut(
+        \DateTimeImmutable $debut,
+        \DateTimeImmutable $fin,
+        int $identreprise
+    ): array
+    {
+        $rows = $this->createQueryBuilder('c')
+            ->select('c.statut, COUNT(c.id) AS total')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('c.statut')
+            ->getQuery()
+            ->getArrayResult()
+        ;
+        $index = [];
+        foreach($rows as $row) {
+            $index[$row['statut']] = (int)$row['total'];
+        }
+
+        return $index;
+    }
+
+    public function recettesParTrajetDetail(
+        \DateTimeImmutable $debut,
+        \DateTimeImmutable $fin,
+        int $identreprise
+    ): array {
+        return $this->createQueryBuilder('c')
+            ->select(
+                'CONCAT(gd.ville, \' → \', ga.ville) AS trajet',
+                'COALESCE(SUM(c.montant), 0) AS montant',
+                'COUNT(c.id) AS nbcourriers',
+            )
+            ->join('c.garedepart', 'gd')
+            ->join('c.garearrivee', 'ga')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('gd.id, ga.id')
+            ->orderBy('montant', 'DESC')
+            ->getQuery()
+            ->getArrayResult()
+        ;
+    }
+
+    /* Bordereau chauffeur
+     */
+    public function findByVoyage(int $voyageId, int $identreprise): array
+    {
+        return $this->createQueryBuilder('c')
+            ->select(
+                'c.codecourrier',
+                'c.nomexpediteur',
+                'c.nomdestinataire',
+                'c.montant',
+                'c.modepaiement',
+                'gd.libelle AS garedepart',
+                'ga.libelle AS garearrivee',
+                'COUNT(dc.id) AS nbcolis',
+            )
+            ->join('c.garedepart', 'gd')
+            ->join('c.garearrivee', 'ga')
+            ->leftJoin('c.detailcourriers', 'dc')
+            ->andWhere('c.voyage = :voyageId')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere('c.statut != :annule')
+            ->andWhere('c.deletedAt IS NULL')
+            ->setParameter('voyageId', $voyageId)
+            ->setParameter('ide', $identreprise)
+            ->setParameter('annule', 'ANNULE')
+            ->groupBy('c.id')
+            ->orderBy('c.codecourrier', 'ASC')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    //    /**
+    //     * @return Courrier[] Returns an array of Courrier objects
+    //     */
+    //    public function findByExampleField($value): array
+    //    {
+    //        return $this->createQueryBuilder('c')
+    //            ->andWhere('c.exampleField = :val')
+    //            ->setParameter('val', $value)
+    //            ->orderBy('c.id', 'ASC')
+    //            ->setMaxResults(10)
+    //            ->getQuery()
+    //            ->getResult()
+    //        ;
+    //    }
+
+    //    public function findOneBySomeField($value): ?Courrier
+    //    {
+    //        return $this->createQueryBuilder('c')
+    //            ->andWhere('c.exampleField = :val')
+    //            ->setParameter('val', $value)
+    //            ->getQuery()
+    //            ->getOneOrNullResult()
+    //        ;
+    //    }
+}
