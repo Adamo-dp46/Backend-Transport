@@ -44,6 +44,11 @@ class PromouvoirUserProcessor implements ProcessorInterface
         }
 
         $roles = $data->getRoles();
+
+        if(!in_array('ROLE_ADMIN', $roles, true) && in_array('ROLE_ADMIN_GARE', $roles, true)) {
+            throw new BadRequestHttpException('Cet utilisateur est administrateur de gare. Révoquez ce rôle avant de le promouvoir en administrateur d\'entreprise.');
+        }
+
         if(in_array('ROLE_ADMIN', $roles, true)) {
             $roles = array_values(array_filter($roles, fn($role) => $role !== 'ROLE_ADMIN')); /*
                 - On rétrograde pour rétirer le rôle d'administrateur

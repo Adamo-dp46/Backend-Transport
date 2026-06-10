@@ -44,8 +44,22 @@ class SuspendreUserProcessor implements ProcessorInterface
             */
         }
 
-        $nouveauStatut = $data->getStatut() === ReferenceStatus::ACTIF->value ? ReferenceStatus::SUSPENDU->value : ReferenceStatus::ACTIF->value;
-        $data->setStatut($nouveauStatut);
+        if(in_array('ROLE_ADMIN_GARE', $data->getRoles(), true) && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true) && !in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true)
+        ) {
+            throw new BadRequestHttpException('Seul un administrateur peut suspendre un administrateur de gare');
+        }
+
+        if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true)) { // On.. ' && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true)'
+            if($data->getGare()?->getId() !== $currentUser->getGare()?->getId()) {
+                throw new BadRequestHttpException('Vous ne pouvez suspendre que les utilisateurs de votre gare');
+            }
+        }
+
+        $data->setStatut(
+            $data->getStatut() === ReferenceStatus::ACTIF->value
+            ? ReferenceStatus::SUSPENDU->value
+            : ReferenceStatus::ACTIF->value
+        );
 
         return $this->processor->process($data, $operation, $uriVariables, $context);
     }

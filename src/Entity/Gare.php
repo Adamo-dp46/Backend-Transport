@@ -8,10 +8,12 @@ use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\OpenApi\Model\Operation;
+use App\Domain\Enum\ReferenceStatus;
 use App\Entity\Interface\EntrepriseOwnedInterface;
 use App\Repository\GareRepository;
 use App\State\EntrepriseInjectionProcessor;
 use App\State\SoftDeleteProcessor;
+use App\State\SuspendreGareProcessor;
 use App\State\UpdatedbyProcessor;
 use App\Validator\UniquePerEntreprise;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -71,6 +73,18 @@ use Symfony\Component\Serializer\Attribute\Groups;
             )
         ),
         new Patch(
+            security: "is_granted('ROLE_ADMIN')",
+            uriTemplate: '/gares/{id}/suspendre',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: SuspendreGareProcessor::class,
+            openapi: new Operation(
+                summary: 'Suspendre ou réactiver une gare',
+                description: 'Bloque la connexion de tous les utilisateurs de cette gare',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
             security: "is_granted('SUPPRIMER', object)",
             uriTemplate: '/gares/{id}/remove',
             requirements: ['id' => '\d+'],
@@ -92,7 +106,7 @@ class Gare extends EntityBase implements EntrepriseOwnedInterface
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['read:Gare', 'read:Courrier'])]
+    #[Groups(['read:Gare', 'read:User', 'read:Courrier'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
@@ -102,12 +116,12 @@ class Gare extends EntityBase implements EntrepriseOwnedInterface
     private ?string $chefgare = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier'])]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier', 'read:User'])]
     #[Assert\Length(min: 2)]
     private ?string $ville = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier'])]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier', 'read:User'])]
     #[Assert\NotBlank]
     #[Assert\Length(min: 2)]
     private ?string $libelle = null;
@@ -141,10 +155,25 @@ class Gare extends EntityBase implements EntrepriseOwnedInterface
     #[ORM\OneToMany(targetEntity: Courrier::class, mappedBy: 'garedepart')]
     private Collection $courriers;
 
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Gare'])]
+    private ?string $statut = ReferenceStatus::ACTIF->value;
+
+    /**
+     * @var Collection<int, User>
+     */
+    #[ORM\OneToMany(targetEntity: User::class, mappedBy: 'gare')]
+    private Collection $users;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['write:Gare'])]
+    private ?\DateTimeImmutable $datecreation = null;
+
     public function __construct()
     {
         $this->tickets = new ArrayCollection();
         $this->courriers = new ArrayCollection();
+        $this->users = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -292,6 +321,60 @@ class Gare extends EntityBase implements EntrepriseOwnedInterface
                 $courrier->setGaredepart(null);
             }
         }
+
+        return $this;
+    }
+
+    public function getStatut(): ?string
+    {
+        return $this->statut;
+    }
+
+    public function setStatut(string $statut): static
+    {
+        $this->statut = $statut;
+
+        return $this;
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    public function getUsers(): Collection
+    {
+        return $this->users;
+    }
+
+    public function addUser(User $user): static
+    {
+        if (!$this->users->contains($user)) {
+            $this->users->add($user);
+            $user->setGare($this);
+        }
+
+        return $this;
+    }
+
+    public function removeUser(User $user): static
+    {
+        if ($this->users->removeElement($user)) {
+            // set the owning side to null (unless already changed)
+            if ($user->getGare() === $this) {
+                $user->setGare(null);
+            }
+        }
+
+        return $this;
+    }
+
+    public function getDatecreation(): ?\DateTimeImmutable
+    {
+        return $this->datecreation;
+    }
+
+    public function setDatecreation(?\DateTimeImmutable $datecreation): static
+    {
+        $this->datecreation = $datecreation;
 
         return $this;
     }

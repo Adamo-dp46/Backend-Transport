@@ -9,6 +9,7 @@ use ApiPlatform\State\ProcessorInterface;
 use App\Entity\User;
 use App\Entity\UserRole;
 use App\Repository\EntrepriseRepository;
+use App\Repository\GareRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -21,7 +22,8 @@ class UserProcessor implements ProcessorInterface
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $hasher,
         private Security $security,
-        private EntrepriseRepository $entrepriseRepository
+        private EntrepriseRepository $entrepriseRepository,
+        private GareRepository $gareRepository
     )
     {
     }
@@ -48,7 +50,20 @@ class UserProcessor implements ProcessorInterface
         }
 
         if($operation instanceof Post) {
-            $data->setEntreprise($entreprise); // On lui affecte l'entreprise de l'utilisateur qui l'a crée 
+            $data->setEntreprise($entreprise); // On lui affecte l'entreprise de l'utilisateur qui l'a crée
+            if($data->getGare() !== null) {
+                $gare = $this->gareRepository->find($data->getGare()->getId());
+                if($gare) {
+                    if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true) && $currentUser->getGare()?->getId() !== $gare->getId()) {
+                        throw new AccessDeniedHttpException('Vous ne pouvez créer des utilisateurs que pour votre propre gare.');
+                    }
+                    $data->setGare($gare);
+                }
+            } elseif(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true)) {
+                $data->setGare($currentUser->getGare()); /*
+                    - On.. auto affectation si l'administrateur de la gare ne précise pas de gare
+                */
+            }
         }
 
         if($operation instanceof Patch) {

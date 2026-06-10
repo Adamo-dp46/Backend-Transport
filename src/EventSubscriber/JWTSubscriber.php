@@ -44,6 +44,10 @@ class JWTSubscriber implements EventSubscriberInterface
         if($fresh->getEntreprise() && $fresh->getEntreprise()->getStatut() === ReferenceStatus::SUSPENDU->value) {
             throw new AccessDeniedHttpException('Votre entreprise a été désactivée. Contactez le support.');
         }
+
+        if($fresh->getGare() && $fresh->getGare()->getStatut() === ReferenceStatus::SUSPENDU->value) {
+            throw new AccessDeniedHttpException('Votre gare a été suspendue. Contactez l\'administrateur.');
+        }
     }
     /*
         public function onLexikJwtAuthenticationOnJwtCreated($event): void

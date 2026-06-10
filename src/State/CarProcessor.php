@@ -63,10 +63,11 @@ class CarProcessor implements ProcessorInterface
         return $this->processor->process($data, $operation, $uriVariables, $context);
     }
 
-    private function regenererSieges(Car $car, int $identreprise) // On peut aussi faire ça dans un event listener ou subscriber pour séparer les responsabilités
+    private function regenererSieges(Car $car, int $identreprise)
     {
-        // Bloquer la régénération si des tickets actifs existent sur ce car
-        if($car->getId() !== null) {
+        if($car->getId() !== null) { /*
+            - On bloque la régénération si des tickets actifs existent sur ce car
+        */
             $ticketsActifs = $this->em->getRepository(Ticket::class)
                 ->createQueryBuilder('t')
                 ->join('t.siege', 's')
@@ -77,10 +78,8 @@ class CarProcessor implements ProcessorInterface
                 ->getQuery()
                 ->getResult();
 
-            if (!empty($ticketsActifs)) {
-                throw new BadRequestHttpException(
-                    'Impossible de modifier la disposition des sièges : des tickets actifs existent sur ce véhicule'
-                );
+            if(!empty($ticketsActifs)) {
+                throw new BadRequestHttpException('Impossible de modifier la disposition des sièges : des tickets actifs existent sur ce véhicule');
             }
         }
 

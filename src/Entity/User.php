@@ -22,6 +22,7 @@ use App\Repository\UserRepository;
 use App\State\ChangePasswordProcessor;
 use App\State\ForgotPasswordProcessor;
 use App\State\MeProvider;
+use App\State\PromouvoirAdminGareProcessor;
 use App\State\PromouvoirUserProcessor;
 use App\State\RegisterProcessor;
 use App\State\ResetPasswordProcessor;
@@ -134,7 +135,19 @@ use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
                 security: [['bearerAuth' => []]]
             )
         ),
-        // -- Profil -- //
+        new Patch(
+            security: "is_granted('ROLE_ADMIN')",
+            uriTemplate: '/users/{id}/promouvoir/gare',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: PromouvoirAdminGareProcessor::class,
+            openapi: new Operation(
+                summary: 'Nommer ou révoquer un administrateur de gare',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        /* Profil
+         */
         new Get(
             security: "is_granted('ROLE_USER')",
             name: 'Me',
@@ -330,12 +343,16 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface /*, JWTU
     #[ORM\OneToMany(targetEntity: PasswordResetToken::class, mappedBy: 'user')]
     private Collection $passwordResetTokens;
 
-    #[ORM\Column(length: 50, nullable: true)] // Non 'nullable'
+    #[ORM\Column(length: 50)]
     #[Groups(['read:User'])]
     private ?string $statut = ReferenceStatus::ACTIF->value;
 
     #[ORM\Column(nullable: true)]
     private ?bool $isFounder = false;
+
+    #[ORM\ManyToOne(inversedBy: 'users')]
+    #[Groups(['read:User', 'write:User'])]
+    private ?Gare $gare = null;
 
     public function __construct()
     {
@@ -629,6 +646,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface /*, JWTU
     public function setIsFounder(?bool $isFounder): static
     {
         $this->isFounder = $isFounder;
+
+        return $this;
+    }
+
+    public function getGare(): ?Gare
+    {
+        return $this->gare;
+    }
+
+    public function setGare(?Gare $gare): static
+    {
+        $this->gare = $gare;
 
         return $this;
     }

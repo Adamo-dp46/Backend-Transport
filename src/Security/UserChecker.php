@@ -30,6 +30,10 @@ class UserChecker implements UserCheckerInterface // Dans 'security.yaml' - 'use
         if($user->getEntreprise() && $user->getEntreprise()->getStatut() === ReferenceStatus::SUSPENDU->value) {
             throw new CustomUserMessageAuthenticationException('Votre entreprise a été désactivée. Contactez le support.');
         }
+
+        if($user->getGare() && $user->getGare()->getStatut() === ReferenceStatus::SUSPENDU->value) {
+            throw new CustomUserMessageAuthenticationException('Votre gare a été suspendue. Contactez l\'administrateur.');
+        }
     }
 
     /**

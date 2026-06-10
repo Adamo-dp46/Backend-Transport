@@ -132,7 +132,7 @@ class Personnel extends EntityBase implements EntrepriseOwnedInterface // HasSof
     private ?string $contact = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['read:Depannage', 'read:Voyage', 'read:Personnel', 'read:Trajet'])]
+    #[Groups(['read:Depannage', 'read:Voyage', 'read:Personnel', 'write:Personnel', 'read:Trajet'])]
     private ?string $code = null;
 
     #[ORM\ManyToOne(inversedBy: 'personnels')]
@@ -156,6 +156,10 @@ class Personnel extends EntityBase implements EntrepriseOwnedInterface // HasSof
     #[ORM\Column(length: 50, nullable: true)]
     #[Groups(['read:Personnel'])]
     private ?string $statut = ReferenceStatus::ACTIF->value;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['read:Depannage', 'write:Personnel'])]
+    private ?\DateTimeImmutable $dateembauche = null;
 
     public function __construct()
     {
@@ -328,6 +332,18 @@ class Personnel extends EntityBase implements EntrepriseOwnedInterface // HasSof
     public function setStatut(?string $statut): static
     {
         $this->statut = $statut;
+
+        return $this;
+    }
+
+    public function getDateembauche(): ?\DateTimeImmutable
+    {
+        return $this->dateembauche;
+    }
+
+    public function setDateembauche(?\DateTimeImmutable $dateembauche): static
+    {
+        $this->dateembauche = $dateembauche;
 
         return $this;
     }

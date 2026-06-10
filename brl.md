@@ -24,6 +24,1178 @@
 - 
 
 - 
+- Les moyens de paiement ou règlement pour les tickets, courrier ou bagages pour savoir par quoi les clients paient le plus souvent
+    > Sur la page de création de ticket :: Mobile money -> Ouvre panneau -> Mtn, Wave.. -> puis on saisi l'indentifiant du paiement dans la base de données
+- Lien vers les ressources de select sur la page de ceux qui en besoin
+- Select | Create User et List User
+    > Présélection + sur les champs select parente, crée et le présélectionne dans le champ
+- Un matricule pour les utilisateurs ayant vendu le ticket, enregistré bagage et courrier 
+- Courrier: séparer leur chiffre d'affaire avec celle de la société
+- Gérer le bordereau gare : /api/voyages/1/bordereau?gare=2
+
+
+
+
+
+
+
+Salut Claude, dans nos conversations précédentes on a développé une application de compagnie de transport en architecture séparé, Backend(Symfony, ApiPlatform, LexikJwtBundle..) et Frontend(Symfony, React UX, tailwind v4, Shadcn) dans lequel Symfony fais les appels api et renvoie les résultats à twig, React Ux est utilisé pour affiché les tables grâce au composant DataTable de Shadcn. Je t'envoie les modules et je vais te poser des questions  Et si tu veux le repository des 2 projets je te l'envoi
+
+- **Les modules**
+    > Le module `Administration` : Entreprise, User, Role, Permission, UserRole
+        > Gestion des comptes utilisateurs et de l'entreprise
+        > Gestion et attribution des rôles
+        > Gestion des permissions RBAC
+
+    > Le module `Personnel` ou `RH` : Typepersonnel, Personnel, Detailpersonnel
+        > Gestion des employés de la compagnie
+        > Affectation d'un personnel à un voyage ou depannage via detail personnel
+        > Historique des affectations avec les detail du personnel
+
+    > Le module `Gestion de stock` & `Approvisionnement` : Typepiece, Marquepiece, Model, Fournisseur, Piece, Approvisionnement, Detailapprovisionnement, Inventaire
+        > Gestion des des pièces détachées
+        > Gestion des fournisseurs
+        > Approvisionnement : Entrée des pièces en stock ou enregistrer un achat de pièces
+            > On crée un approvisionnement et ses details approvisionnements ce qui génère un mouvement `ENTREE` dans `Inventaire` et met à jour le stock automatiquement
+        > Dépannage : Sortie de stock.. voir module flotte
+            > !! dépannage qui génère un mouvement `SORTIE` dans `Inventaire` et met à jour le stock automatiquement
+        > Ajustement manuel pour corriger le stock et génère un mouvement `AJUSTEMENT` dans `Inventaire` et les inventaires sont en lecture seule `getCollection` et `get`
+        > Alertes stock faible
+        > Inventaire : Suivi de stock actuel et historique des mouvements
+
+    > Le module `Flotte` & `Maintenance` : Marque, Car, Depannage, DetailDepannage
+        > Gestion des cars
+        > On crée un dépannage ce qui ajoute des détails dépannage et génère un mouvement `SORTIE` dans `Inventaire` et met à jour le stock
+        > Affecter un personnel à un détail dépannage ex: mécaniciens
+        > Historique des maintenances par véhicule
+
+    > Le module `Exploitation` : Gare, Tarif, Trajet, Voyage
+        > Gestion des gares, tarifs
+        > Créer un Trajet et définir son tarif
+        > Gestion du voyage
+            > Affecter un car disponible et du personnel via détail personnel à un voyage
+            > Gérer horaires de départ et d'arrivée
+        > Suivi du statut voyage
+        > Historique complet pour reporting ou voyages par trajet et véhicule
+        > Impression de bordereau qui est un document qui résume toutes les ventes de tickets d'un voyage dans une gare donnée, donc on a `Ticket` ManyToOne `Gare`
+            > Le bordereau de gare qui est un document filtré par gare d'émission et liste les tickets vendus depuis une gare spécifique pour un voyage destiné au chef de gare qui fait le bilan de sa caisse..
+            > !! chauffeur qui est un document global pour le voyage entier, sans filtre de gare et liste tout ce que le chauffeur transporte comme tous les tickets, tous les courriers embarqués sur et tous les bagages embarqués sur ce voyage remis à la gare d'arrivée
+        > Si on peut annuler un voyage alors le car devient disponile et les places remboursées
+
+    > Le module `Billetterie` : Ticket
+        > Gestion et émission des tickets pour un voyage
+        > Calcul automatique du montant via le tarif
+        > Suivi du nombre de places vendues et de la recette par voyage
+        > Si on peut annuler un ticket on décrémente les places occupées du voyage
+
+    > Le module `Courrier` : Tarifcourrier, Courrier, Detailcourrier
+        > Pour calculer la taxe d'un colis `Detailcourrier` on se base sur valeur, à la création on cherche le `TarifCourrier` dont `valeur_min <= valeur <= valeur_max` et on affecte son `montanttaxe` ou `montant` du colis
+        > On a géré le tarif des colis via un système de `grille tarifaire` ou tranches `10 001 - 50 000 FCFA → taxe fixe 3 000` et on peut le faire aussi avec le poids du colis `k`
+        > !! que le `statut` du courrier suit automatiquement le voyage on a `VoyageClotureSatutSubscriber` qui gère la transition `EN_TRANSIT → RECEPTIONNE` qui correspond à l'accusé de réception à la gare d'arrivée qui confirme l'arrivée des colis
+        > !! la transition du statut `RECEPTIONNE → LIVRE` qui correspond à la remise au destinataire avec potentiellement un paiement, c'est l'agent de la gare d'arrivée qui confirme la remise au destinataire via l'endpoint `../livrer`
+        > !! le paiement de la taxe on a 2 types, à l'envoi ou à la reception du courrier
+        > La recette totale du courrier se base sur le mode de paiement
+
+    > Le module `Bagage` : Tarifbagage, Bagage
+        > On a 2 façon de faire
+            > Le modèle `A` déclaration à l'achat qui permet au client de déclarer ses bagages en achetant son ticket de voyage. Le prix est calculé et inclus immédiatement
+            > !! `B` facturation au chargement qui au chargement du car les bagages du client sont pesés physiquement et un ticket de pesée séparé est émis qui est un reçu distinct du ticket de voyage qui documente le poids, la nature et le coût des bagages.. et lie le bagage au client
+        > Le tarif du bagage est basée sur le poids
+        > Pour gérer l'automatisation du statut du bagage on a `VoyageClotureSatutSubscriber` qui écoute les changements sur `Voyage` et va causer un soucis si on a clôturé le voyage avant de déclarer que le bagage est perdu
+        > La recette totale du bagage se base sur le moment ou le bagage est embarqué
+
+    > Le module `Tableau de bord` & `Rapports`
+        > Exploitation
+            > Nombre de voyages par période
+            > Taux de remplissage
+            > Voyages par statut 
+        > Financier
+            > Recettes billetterie
+            > Coût des dépannages
+            > Coût approvisionnements
+        > Stock
+            > Stock actuel par pièce
+            > Pièces critiques
+            > Mouvements récents
+        > Flotte
+            > Véhicules les plus en panne
+            > Véhicules par état
+            > Coût de maintenance par véhicule
+
+Voici les repository :
+    - https://github.com/Damo-dp45/Backend-Transport.git
+    - https://github.com/Damo-dp45/Frontend-Transport.git
+Ne prend pas en compte le fichier brl.md dans les deux projets, c'est juste un brouillon
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+- Ticket
+    - Code QR sur les tickets
+    - Un champ remise ex:1000 sur ticket,  :: on doit le prixvendu et béfinicière
+        - contactbeneficiaire
+    - Réduction dans ticket
+        - Beneficiaire -> soit on le crée ou on le choisi avec le select..
+            - Peut être un client qui vient toujours ou un corsaire(celui qui envoi le client) reçois identreprise et visible dans toutes les gares
+    - Carte de fidélité pour les meilleurs clients basé sur le numéro du client
+
+- Reservation de ticket, une personne peut rester chez lui à la maison et réservé un ticket ..puis le tire en ligne(perso)
+    - Application mobile pour les clients Réservation de tickets voir les départs, scanner un code qr (comportant toutes les informations du ticket)
+
+- Place: de la droite vers la gauche et 6 places derrière
+    3 4 5 2 1
+    6 places
+    - Vert: libre au départ, vendu: rouge, libérer à nouveau gris, ainsi de suite
+
+On vas gérer les dépenses : 2 types (Dépense générale et gare)
+    Objetdepense -> libelle          Objetdepensegare..
+    Depense                          Depensegare..
+        objetdepense -> vers Objetdepense
+        date
+        montant
+        detail
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Très bonne description, je vais analyser tout ça soigneusement avant de te proposer un plan.
+
+---
+
+## Ce que je comprends de la nouvelle logique
+
+**Les entités structurantes à revoir/créer :**
+
+**`Trajet`** ne sera plus juste une route abstraite avec une provenance/destination simple. Il devient une **séquence ordonnée de gares** avec des tarifs de tronçon entre chaque paire de gares. Donc `Trajet` → `TrajetGare` (table de liaison ordonnée) + `TarifTroncon` (tarif entre deux gares d'un même trajet).
+
+**`Voyage`** = ce qu'on appelait "départ" dans ta description. Un voyage est une exécution du trajet à une heure précise. La gare de départ d'un voyage n'est pas forcément la gare d'origine du trajet — une gare intermédiaire peut créer un nouveau départ.
+
+**`Siege`** et la vente : la disponibilité d'un siège n'est plus globale sur le voyage, elle est **par tronçon**. Un siège peut être vendu plusieurs fois sur le même voyage si les tronçons ne se chevauchent pas. C'est le point le plus complexe.
+
+---
+
+## Les points sur lesquels je veux être sûr avant de continuer
+
+**Point 1 — La gare intermédiaire et les places.**
+Tu dis que la gare 2 peut vendre les 64 places sans tenir compte des 30 vendues en gare 1. C'est parce que les 30 clients de la gare 1 descendent obligatoirement à la gare 2 ? Ou c'est parce que certains clients de la gare 1 peuvent aller au-delà de la gare 2 (gare 3, destination finale) ?
+
+Parce que si un client de la gare 1 va jusqu'à la gare 3 et qu'un client de la gare 2 monte aussi vers la gare 3, ils occupent le même siège physiquement — ce qui est impossible.
+
+**Point 2 — "Grisé" par gare.**
+Tu dis que chaque gare voit grisés uniquement les sièges qu'elle a elle-même vendus. Mais dans ce cas, comment le commercial à bord sait quels sièges sont physiquement occupés quand il est entre deux gares ?
+
+**Point 3 — Le commercial en route (TPE).**
+Quand un client descend en route (pas à une gare), c'est l'admin de la gare de provenance qui dégrise. Mais le commercial est à bord du car, donc il fait la demande à distance ? Via l'application ?
+
+**Point 4 — Nouveau départ depuis une gare intermédiaire.**
+Quand la gare 2 programme un nouveau départ parce que le car est plein, ce nouveau voyage a le même car ? Ou un autre car de la gare 2 ?
+
+
+```markdown
+Point 1 : C'est parce que certains clients de la gare 1 peuvent aller au-delà de la gare 2, on doit empêcher que deux clients occupe le même siège donc je me dis qu'une solution est de grisé un siège selon la gare de destination du client pour toutes les gares du trajet et s'il descend en route le commercial dégrise le siège pour en prendre d'autres
+
+Point 2 : Tu as raison, propose moi une solution pour être cohérent
+
+Point 3 : Il va appeler l'administrateur avec son téléphone, ce n'est pas l'application qui gère ça
+
+Point 4 : En cas de nouveau départ la gare 2 utilise un autre car
+```
+
+
+Parfait, les 4 points sont clairs. Voici mon analyse complète.
+
+---
+
+## Modèle mental consolidé
+
+### La disponibilité d'un siège est une question de tronçon
+
+Un siège est occupé entre la gare d'embarquement et la gare de descente du client. Donc un ticket doit porter **deux informations** : `gare_embarquement` et `gare_descente`.
+
+Exemple concret sur un trajet Abidjan → Yamoussoukro → Bouaké → Korhogo :
+
+```
+Siège 5 :
+  - Client A : Abidjan → Bouaké       (tronçon 1→3)
+  - Siège 5 libre à partir de Bouaké
+  - Client B : Bouaké → Korhogo       (tronçon 3→4)  ✅ possible
+  - Client C : Yamoussoukro → Bouaké  (tronçon 2→3)  ❌ impossible, A est déjà assis
+```
+
+Donc pour savoir si un siège est disponible pour un client qui monte en gare X et descend en gare Y, on vérifie qu'il n'existe aucun ticket sur ce voyage pour ce siège dont le tronçon **chevauche** [X, Y].
+
+Deux tronçons [a, b] et [c, d] se chevauchent si `a < d && c < b` (indices des gares dans l'ordre du trajet).
+
+---
+
+### Ce que ça implique pour le grisage par gare
+
+**La solution cohérente :** un siège apparaît grisé pour une gare si ce siège a un ticket actif dont le tronçon **inclut** la position de cette gare dans le trajet.
+
+Donc la gare 2 voit grisé le siège 5 si un client monté en gare 1 va au-delà de la gare 2. Elle ne voit pas grisé le siège 5 si le client de la gare 1 descend exactement en gare 2 — ce siège est libre pour elle.
+
+Le commercial à bord voit les sièges **physiquement occupés à l'instant T**, ce qui correspond aux tickets dont le tronçon contient la position courante du car. C'est la même logique, juste avec la gare courante comme référence.
+
+---
+
+## Ce qui change dans le schéma
+
+### `TrajetGare` — nouvelle table de liaison
+
+```
+trajet_id | gare_id | ordre | est_terminus_depart | est_terminus_arrivee
+```
+
+`ordre` définit la séquence. `est_terminus_depart` = true uniquement pour la gare d'origine, `est_terminus_arrivee` = true pour la gare finale.
+
+### `TarifTroncon` — tarif entre deux gares d'un trajet
+
+```
+trajet_id | gare_depart_id | gare_arrivee_id | montant
+```
+
+Ce qui remplace l'actuel `Tarif` simple sur le trajet. On peut avoir Abidjan→Yamoussoukro = 5000, Abidjan→Bouaké = 8000, Yamoussoukro→Bouaké = 4000, etc.
+
+### `Ticket` — deux nouvelles colonnes
+
+```
+gare_embarquement_id | gare_descente_id
+```
+
+À la place de l'unique `gare_id` actuel. Le `prix` est calculé depuis `TarifTroncon` correspondant.
+
+### `Voyage` — gare de départ effective
+
+```
+gare_depart_id (la gare qui a créé ce départ, peut être intermédiaire)
+```
+
+Parce qu'un nouveau départ créé depuis la gare 2 a `gare_depart_id = gare_2`. Le `trajet_id` reste le même.
+
+---
+
+## Plan d'attaque étape par étape
+
+**Étape 1 — Multi-gare sur les utilisateurs et la sécurité**
+C'est le socle de tout. Sans ça rien d'autre ne tient.
+- Ajouter `gare_id` et `ROLE_ADMIN_GARE` sur `User`
+- Suspension de gare + blocage JWT
+- Scope des données par gare (un agent ne voit que ce qui concerne sa gare)
+
+**Étape 2 — Restructuration du Trajet**
+- Créer `TrajetGare` (séquence ordonnée de gares)
+- Créer `TarifTroncon` (tarif par paire de gares)
+- Migrer les anciens trajets
+
+**Étape 3 — Voyage avec gare de départ effective**
+- Ajouter `gare_depart_id` sur `Voyage`
+- Adapter `VoyageProcessor` et les règles de création
+
+**Étape 4 — Billetterie avec tronçons**
+- Ajouter `gare_embarquement_id` et `gare_descente_id` sur `Ticket`
+- Refaire `SiegeStateProvider` avec la logique de chevauchement de tronçons
+- Adapter le `TicketProcessor` pour calculer le prix depuis `TarifTroncon`
+
+**Étape 5 — Règles métier de vente par gare**
+- Une gare ne peut vendre que les tickets de son tronçon
+- Vérification des droits à la vente par rapport à la position de la gare dans le trajet
+- Logique de "nouveau départ" depuis une gare intermédiaire
+
+**Étape 6 — Adapater le frontend**
+- Plan de sièges avec grisage contextuel par gare
+- Formulaire de ticket avec sélection de gare de descente
+- Interface admin gare
+
+
+
+
+
+
+
+
+
+
+
+Salut Claude, j'ai développé une application de compagnie de transport en architecture séparé, Backend(Symfony, ApiPlatform, LexikJwtBundle, GesdinetRefreshBundle...) et Frontend(Symfony, React UX, tailwind v4, Shadcn...) dans lequel Symfony fais les appels api et renvoie les résultats à twig, React Ux est utilisé pour affiché les tables grâce au composant DataTable de Shadcn
+
+Analyse les 2 projets pour comprendre, ne prend pas en compte le fichier brl.md dans les deux projets, c'est juste un brouillon
+
+J'ai aussi listé les modules de l'application dans le README.md de la partie Backend(BK-Transport)
+
+Aussi ne modifie jamais les fichiers de mes projets, crée plutôt un fichier ia.md dans lequel tu vas écrire
+
+
+
+
+Dans l'application on a déjà la notion de multi-entreprise, maintenant on vas ajouter la notion de multi-gare :
+
+- L'administrateur de l'entreprise peut suspendre une gare ce qui va bloquer la connexion à tous les utilisateurs de cette gare => J'ai déjà géré ça
+- Lorsque l'administrateur voudra crée un utilisateur il pourra le lié à une gare => J'ai déjà commencé, tu peux vérifier si c'est juste
+- L'administrateur de l'entreprise peut promouvoir l'utilisateur d'une gare en administrateur de la gare vu que pour chaque gare on aura un administrateur via un 'ROLE_ADMIN_GARE' => J'ai déjà commencé, tu peux vérifier si c'est juste
+- L'administrateur de la gare doit pouvoir créer ses propres utilisateurs qui seront automatiquement liés à sa gare et leur donner des permissions ou les suspendre et autre
+
+
+
+
+
+
+- A chaque gare intermédiare voilà comment il est arrivée et voilà comment il est parti - bordereau
+
+Dans la logique de l'application je crois que j'ai mal gérer le module Exploitation, Billetterie, Courrier, Bagage, etc... on n'avais pas pris en compte les gares intermédiaires, voici la logique qu'on vas apporter à l'application :
+
+On m'a dit que sur chaque trajet on a plusieurs départ du genre départ 1 peut être à 09H, départ 2 à 10H etc.., donc je me dis que départ réprésente voyage dans notre cas
+
+- Lors de la création d'un trajet on vas liés les gares qui le conçerne, dans un trajet on a la gare de départ, la gare de destination et les gares intermédiares
+    - Chaque destination aura son tarif du genre de gare en gare
+    - En créant le trajet on sélectionne les gares qui conçerne le trajet et on peut aussi les rangés par ordre
+    - Les utilisateurs d'une gare ne peuvent voir que les données des gares qui sont sur le même trajet que leur gare vu que des informations sont partagés entre des gares
+    - Une gare ne peut pas vendre un ticket d'un voyage qui n'est sur son trajet
+
+
+Pour mon idée, d'abord savoir est ce que chaque gare à des cars disponible, ou le car se trouve toujours à la gare de provenance du trajet
+
+Une gare intermédiaire ne peut pas vendre les tickets de la gare précédente ou de provenance.. je me dis aussi que c'est pas nécéssaire vu qu'il ne voit pas la carte de la gare de provenance
+
+
+    - Les gares intermédiares du trajet ne clôture pas le voyage mais receptionne, si une gare intermédiaire fais receptionné sur le voyage ça dégrise les sièges des clients qui doivent décendre à cette gare pour la gare de provenance
+        Mais le commercial pose problème, comment sa carte s'actualise s'il est dans une gare intermédiaire lorsqu'il vont vendre sièges
+
+
+    - Propose moi une solution propre et cohérent pour la partie dans laquelle on grise les sièges vendu :
+
+        - Dans la partie création de ticket, le faite de grisés les sièges en cas de vente ne conçernent que la gare qui vend, si le client ne décend pas à une gare intermédiaire ex: gare 2 elle doit voir les sièges grisé, les autres gares du même trajet peuvent vendre et verront en grisés les sièges qu'ils ont vendu
+            > le problème : Tu dis que chaque gare voit grisés uniquement les sièges qu'elle a elle-même vendus. Mais dans ce cas, comment le commercial à bord sait quels sièges sont physiquement occupés quand il est entre deux gares ?
+
+
+
+- Ex: Si la gare 1 vend 30/64, la gare 2 peut vendre les 64 places du départ sans tenir compte des places vendu à la gare précédente, le car arrive à la gare 2 des clients vont décendre et les autres montes au cas ou c'est rempli la gare 2 programme un autre départ avec un autre car pour les clients restants, vend les tickets et devient la gare de provenance du nouveau départ
+
+**Point 1 — La gare intermédiaire et les places.**
+Tu dis que la gare 2 peut vendre les 64 places sans tenir compte des 30 vendues en gare 1. C'est parce que les 30 clients de la gare 1 descendent obligatoirement à la gare 2 ? Ou c'est parce que certains clients de la gare 1 peuvent aller au-delà de la gare 2 (gare 3, destination finale) ?
+
+Vu que certains clients de la gare 1 peuvent aller au-delà de la gare 2, on doit empêcher que deux clients occupe le même siège donc je me dis qu'une solution est de grisé un siège selon la gare de destination du client pour toutes les gares du trajet
+
+
+
+- Dans un départ(voyage) on un chauffeur et un commercial, le commercial est lié à la gare de provenance, le commercial peut vendre les tickets en route via un TPE dans le cas ou un client monte en route, si un client déscend et qu'un autre monte le commercial va appeller l'administrateur de la gare de provenance pour lui demander de dégrisé le siège pour qu'il le revend
+- Des clients peuvent descendre dans les gares intermédiares ou en cours de chemin du départ(voyage) et d'autres peuvent monter pour prendre leur place donc on doit pouvoir revendre un siège plusieurs fois
+
+
+C'est a peu près la logique qu'on m'a expliquer, analyse bien pour être cohérent
+
+On vas aller étape par étape et liste par quoi on devrait commencer
+
+
+
+
+
+
+
+
+## Ce qu'on va faire
+
+L'ancien `Trajet` avait `provenance` et `destination` en string simple + un `Tarif` unique. On va :
+
+**1. Créer `TrajetGare`** — table de liaison ordonnée entre `Trajet` et `Gare` avec un `ordre` et des flags `estDepart` / `estArrivee`.
+
+**2. Créer `TarifTroncon`** — tarif entre deux gares d'un même trajet (remplace l'unique `Tarif` global).
+
+**3. Adapter `Trajet`** — on garde `provenance` et `destination` en string pour la compatibilité (dénormalisés depuis les gares de `TrajetGare`) mais on ajoute les deux nouvelles relations. Le `Tarif` global reste pour la rétrocompatibilité mais devient optionnel.
+
+**4. Adapter `TrajetProcessor`** — à la création, on reçoit la liste ordonnée des gares + les tarifs de tronçon, on crée les `TrajetGare` et `TarifTroncon`, et on dénormalise `provenance`/`destination` depuis la première et dernière gare.
+
+**5. Migration.**
+
+**6. Adapter le frontend** — `TrajetFormType` devient un formulaire avec sélection multiple ordonnée des gares + saisie des tarifs par tronçon.
+
+On commence.
+
+---
+
+### 1. Entité `TrajetGare`### 2. Entité `TarifTroncon`### 3. Repositories `TrajetGareRepository` et `TarifTronconRepository`### 4. Adapter `Trajet.php` — ajout des deux nouvelles relationsMaintenant on ajoute les getters/setters pour les nouvelles collections avant `getSoftDeleteBlockers` :### 5. `TrajetInput.php` — nouveau DTO avec gares et tronçons### 6. `TrajetProcessor.php` — logique de création complète### 7. Migration### 8. Frontend — `TrajetFormType.php`### 9. Frontend — `TrajetController.php` méthode `new`Vérification finale :Tout est cohérent. Voici le code de l'étape 2 :
+
+---
+
+### `TrajetGare.php` (nouveau)
+
+```php
+<?php
+namespace App\Entity;
+
+use App\Repository\TrajetGareRepository;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
+
+#[ORM\Entity(repositoryClass: TrajetGareRepository::class)]
+#[ORM\UniqueConstraint(columns: ['trajet_id', 'gare_id'])]
+#[ORM\UniqueConstraint(columns: ['trajet_id', 'ordre'])]
+class TrajetGare
+{
+    #[ORM\Id, ORM\GeneratedValue, ORM\Column]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?int $id = null;
+
+    #[ORM\ManyToOne(inversedBy: 'trajetGares')]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private ?Trajet $trajet = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'RESTRICT')]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?Gare $gare = null;
+
+    #[ORM\Column]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private int $ordre = 0;          // 0 = départ, n-1 = arrivée
+
+    #[ORM\Column]
+    #[Groups(['read:Trajet'])]
+    private bool $estDepart = false;
+
+    #[ORM\Column]
+    #[Groups(['read:Trajet'])]
+    private bool $estArrivee = false;
+
+    // ... getters/setters
+}
+```
+
+---
+
+### `TarifTroncon.php` (nouveau)
+
+```php
+<?php
+namespace App\Entity;
+
+use App\Repository\TarifTronconRepository;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Validator\Constraints as Assert;
+
+#[ORM\Entity(repositoryClass: TarifTronconRepository::class)]
+#[ORM\UniqueConstraint(columns: ['trajet_id', 'gare_depart_id', 'gare_arrivee_id'])]
+class TarifTroncon
+{
+    #[ORM\Id, ORM\GeneratedValue, ORM\Column]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?int $id = null;
+
+    #[ORM\ManyToOne(inversedBy: 'tarifTroncons')]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private ?Trajet $trajet = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'RESTRICT')]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?Gare $gareDepart = null;   // gare d'embarquement
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'RESTRICT')]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?Gare $gareArrivee = null;  // gare de descente
+
+    #[ORM\Column]
+    #[Assert\GreaterThan(0)]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?int $montant = null;       // en FCFA
+
+    #[ORM\Column(nullable: true)]
+    private ?int $identreprise = null;
+
+    // ... getters/setters
+}
+```
+
+---
+
+### `Trajet.php` — ajouts uniquement
+
+```php
+// Nouvelles collections ajoutées après $tarif
+
+/** @var Collection<int, TrajetGare> */
+#[ORM\OneToMany(targetEntity: TrajetGare::class, mappedBy: 'trajet',
+    cascade: ['persist', 'remove'], orphanRemoval: true)]
+#[ORM\OrderBy(['ordre' => 'ASC'])]
+#[Groups(['read:Trajet'])]
+private Collection $trajetGares;
+
+/** @var Collection<int, TarifTroncon> */
+#[ORM\OneToMany(targetEntity: TarifTroncon::class, mappedBy: 'trajet',
+    cascade: ['persist', 'remove'], orphanRemoval: true)]
+#[Groups(['read:Trajet'])]
+private Collection $tarifTroncons;
+
+// Dans __construct()
+$this->trajetGares   = new ArrayCollection();
+$this->tarifTroncons = new ArrayCollection();
+```
+
+---
+
+### `TrajetInput.php` (réécrit)
+
+```php
+class TrajetInput
+{
+    /** IDs de gares ordonnés — premier = départ, dernier = arrivée (min 2) */
+    #[Assert\Count(min: 2)]
+    #[Groups(['write:TrajetInput'])]
+    public array $gareIds = [];
+
+    /** [{ gareDepartId, gareArriveeId, montant }] — min 1 tronçon */
+    #[Assert\Count(min: 1)]
+    #[Groups(['write:TrajetInput'])]
+    public array $troncons = [];
+
+    /** Rétrocompatibilité : tarif unique optionnel */
+    #[Groups(['write:TrajetInput'])]
+    public ?int $tarifId = null;
+}
+```
+
+---
+
+### `TrajetProcessor.php` (réécrit) — logique clé
+
+```php
+// 1. Charger et valider toutes les gares
+$gares = []; // [id => Gare]
+foreach ($gareIds as $id) { ... }
+
+// 2. Dénormaliser provenance/destination depuis première/dernière gare
+$provenance  = $gares[$gareIds[0]]->getLibelle();
+$destination = $gares[$gareIds[n-1]]->getLibelle();
+
+// 3. Rétrocompatibilité tarifId → tronçon unique
+if (empty($troncons) && $data->tarifId) {
+    $troncons = [['gareDepartId' => first, 'gareArriveeId' => last, 'montant' => tarif->getMontant()]];
+}
+
+// 4. Créer TrajetGare pour chaque gare (avec ordre, estDepart, estArrivee)
+foreach ($gareIds as $ordre => $gareId) {
+    $tg = (new TrajetGare())
+        ->setGare($gares[$gareId])
+        ->setOrdre($ordre)
+        ->setEstDepart($ordre === 0)
+        ->setEstArrivee($ordre === count - 1);
+    $trajet->addTrajetGare($tg);
+}
+
+// 5. Créer TarifTroncon pour chaque tronçon déclaré
+foreach ($troncons as $t) {
+    $tt = (new TarifTroncon())
+        ->setGareDepart($gares[$t['gareDepartId']])
+        ->setGareArrivee($gares[$t['gareArriveeId']])
+        ->setMontant((int)$t['montant'])
+        ->setIdentreprise($entrepriseId);
+    $trajet->addTarifTroncon($tt);
+}
+```
+
+---
+
+### `TrajetController::new` (frontend)
+
+```php
+// Plus de FormType — soumission JSON depuis le JS du template
+if ($request->isMethod('POST')) {
+    $payload = json_decode($request->getContent(), true)
+        ?? json_decode($request->request->get('payload'), true);
+
+    $this->api->post('/api/trajets', $payload);
+    // payload attendu : { gareIds: [1, 3, 5], troncons: [{gareDepartId:1, gareArriveeId:3, montant:3000}, ...] }
+}
+return $this->render('trajet/new.html.twig', ['gares' => $gares]);
+```
+
+---
+
+### Migration `Version20260609000002`
+
+```sql
+-- trajet_gare
+CREATE TABLE trajet_gare (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    trajet_id INT NOT NULL,
+    gare_id   INT NOT NULL,
+    ordre     INT NOT NULL,
+    est_depart   TINYINT(1) DEFAULT 0,
+    est_arrivee  TINYINT(1) DEFAULT 0,
+    UNIQUE (trajet_id, gare_id),
+    UNIQUE (trajet_id, ordre)
+);
+
+-- tarif_troncon
+CREATE TABLE tarif_troncon (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    trajet_id       INT NOT NULL,
+    gare_depart_id  INT NOT NULL,
+    gare_arrivee_id INT NOT NULL,
+    montant         INT NOT NULL,
+    identreprise    INT DEFAULT NULL,
+    UNIQUE (trajet_id, gare_depart_id, gare_arrivee_id)
+);
+
+-- tarif_id sur trajet devient nullable
+ALTER TABLE trajet MODIFY tarif_id INT DEFAULT NULL;
+```
+
+---
+
+**Points importants à noter :**
+
+Le champ `tarif` sur `Trajet` **reste** mais devient nullable — les anciens trajets ne cassent pas. La logique de prix des tickets devra désormais chercher dans `TarifTroncon` en priorité.
+
+Le template `trajet/new.html.twig` doit être **refait en JS** : l'utilisateur construit la séquence de gares par drag-and-drop ou boutons +/-, et pour chaque paire de gares consécutives (ou directe) il saisit un montant. Le JS envoie le JSON `{ gareIds, troncons }` via `fetch()` ou un champ hidden.
+
+On passe à l'étape 3 ?
+
+
+
+
+
+
+
+Parfait, ça simplifie beaucoup les choses. Concrètement pour l'étape 2 ça veut dire :
+
+**Sur `Trajet`**
+- On supprime complètement `provenance`, `destination` en string et `tarif` (l'ancien `Tarif` global)
+- On garde uniquement `TrajetGare` et `TarifTroncon`
+- La migration sera un schema propre sans colonnes legacy
+
+**Sur `TrajetInput`**
+- On supprime le `tarifId` optionnel qu'on avait gardé pour la rétrocompatibilité
+- Le payload attendu sera uniquement `{ gareIds: [...], troncons: [...] }`
+
+**Sur `TrajetProcessor`**
+- On supprime tout le bloc de rétrocompatibilité `tarifId → tronçon unique`
+- La logique sera directe et propre
+
+**Sur la migration**
+- On peut `ALTER TABLE trajet DROP COLUMN provenance, destination, tarif_id` sans se soucier des données existantes
+- Ou carrément réécrire le schema `trajet` depuis zéro
+
+**Sur `Voyage`**
+- `provenance` et `destination` en string sur `Voyage` sont aussi à supprimer — on les dérivera depuis `TrajetGare` à la création
+
+On attaque l'étape 2 ?
+
+
+
+
+
+
+
+
+Laisse-moi relire tous les fichiers pour afficher le code exact tel qu'il est.Je remarque que `findAllAvecStats` dans `TrajetRepository` utilise encore `tr.provenance` et `tr.destination` — il faut le corriger aussi.Tout est propre. Voici maintenant tous les codes affichés dans la conversation.
+
+---
+
+## Étape 2 — Tous les codes
+
+### `Trajet.php` (réécrit)
+
+```php
+<?php
+
+namespace App\Entity;
+
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\OpenApi\Model\Operation;
+use App\Entity\Dto\TrajetInput;
+use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Entity\Interface\HasSoftDeleteGuard;
+use App\Repository\TrajetRepository;
+use App\State\SoftDeleteProcessor;
+use App\State\TrajetProcessor;
+use App\State\UpdatedbyProcessor;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
+
+#[ORM\Entity(repositoryClass: TrajetRepository::class)]
+#[ApiResource(
+    security: "is_granted('IS_AUTHENTICATED_FULLY')",
+    normalizationContext: ['groups' => ['read:Trajet', 'read:Base'], 'skip_null_values' => false],
+    denormalizationContext: ['groups' => ['write:Trajet']],
+    paginationEnabled: false,
+    order: ['createdAt' => 'DESC'],
+    operations: [
+        new GetCollection(
+            security: "is_granted('VOIR', 'Trajet') or is_granted('ROLE_USER')",
+            openapi: new Operation(summary: 'Liste des trajets', security: [['bearerAuth' => []]])
+        ),
+        new Get(
+            security: "is_granted('VOIR', object)",
+            requirements: ['id' => '\d+'],
+            openapi: new Operation(summary: 'Le trajet', security: [['bearerAuth' => []]])
+        ),
+        new Post(
+            security: "is_granted('CREER', 'Trajet')",
+            input: TrajetInput::class,
+            processor: TrajetProcessor::class,
+            denormalizationContext: ['groups' => ['write:TrajetInput']],
+            openapi: new Operation(
+                summary: 'Créer un trajet',
+                description: 'Création du trajet avec ses gares ordonnées et ses tarifs de tronçon',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
+            security: "is_granted('MODIFIER', object)",
+            requirements: ['id' => '\d+'],
+            processor: UpdatedbyProcessor::class,
+            openapi: new Operation(summary: 'Modification du trajet', security: [['bearerAuth' => []]])
+        ),
+        new Patch(
+            security: "is_granted('SUPPRIMER', object)",
+            uriTemplate: '/trajets/{id}/remove',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: SoftDeleteProcessor::class,
+            openapi: new Operation(summary: 'Mise en corbeille du trajet', security: [['bearerAuth' => []]])
+        ),
+    ],
+    openapi: new Operation(security: [['bearerAuth' => []]])
+)]
+class Trajet extends EntityBase implements EntrepriseOwnedInterface, HasSoftDeleteGuard
+{
+    #[ORM\Id, ORM\GeneratedValue, ORM\Column]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?int $id = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?string $codetrajet = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $identreprise = null;
+
+    /** @var Collection<int, TrajetGare> */
+    #[ORM\OneToMany(targetEntity: TrajetGare::class, mappedBy: 'trajet', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['ordre' => 'ASC'])]
+    #[Groups(['read:Trajet'])]
+    private Collection $trajetGares;
+
+    /** @var Collection<int, TarifTroncon> */
+    #[ORM\OneToMany(targetEntity: TarifTroncon::class, mappedBy: 'trajet', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[Groups(['read:Trajet'])]
+    private Collection $tarifTroncons;
+
+    /** @var Collection<int, Voyage> */
+    #[ORM\OneToMany(targetEntity: Voyage::class, mappedBy: 'trajet')]
+    private Collection $voyages;
+
+    public function __construct()
+    {
+        $this->voyages       = new ArrayCollection();
+        $this->trajetGares   = new ArrayCollection();
+        $this->tarifTroncons = new ArrayCollection();
+    }
+
+    public function getId(): ?int { return $this->id; }
+
+    public function getCodetrajet(): ?string { return $this->codetrajet; }
+    public function setCodetrajet(string $codetrajet): static { $this->codetrajet = $codetrajet; return $this; }
+
+    public function getIdentreprise(): ?int { return $this->identreprise; }
+    public function setIdentreprise(?int $identreprise): static { $this->identreprise = $identreprise; return $this; }
+
+    // Helpers — lit depuis trajetGares sans requête supplémentaire
+    public function getGareDepart(): ?Gare
+    {
+        foreach ($this->trajetGares as $tg) {
+            if ($tg->isEstDepart()) return $tg->getGare();
+        }
+        return null;
+    }
+
+    public function getGareArrivee(): ?Gare
+    {
+        foreach ($this->trajetGares as $tg) {
+            if ($tg->isEstArrivee()) return $tg->getGare();
+        }
+        return null;
+    }
+
+    // ... getters/setters TrajetGare, TarifTroncon, Voyage, getSoftDeleteBlockers, getVoyagesCount
+}
+```
+
+---
+
+### `TrajetInput.php` (réécrit)
+
+```php
+<?php
+
+namespace App\Entity\Dto;
+
+use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Validator\Constraints as Assert;
+
+class TrajetInput
+{
+    /**
+     * Liste ordonnée des IDs de gares.
+     * Premier = départ, dernier = arrivée finale. Min 2.
+     * @var int[]
+     */
+    #[Assert\NotBlank]
+    #[Assert\Count(min: 2, minMessage: 'Un trajet doit avoir au moins 2 gares (départ et arrivée).')]
+    #[Groups(['write:TrajetInput'])]
+    public array $gareIds = [];
+
+    /**
+     * Tarifs par tronçon : [{ gareDepartId, gareArriveeId, montant }]
+     * @var array<int, array{gareDepartId: int, gareArriveeId: int, montant: int}>
+     */
+    #[Assert\NotBlank]
+    #[Assert\Count(min: 1, minMessage: 'Au moins un tarif de tronçon est requis.')]
+    #[Groups(['write:TrajetInput'])]
+    public array $troncons = [];
+}
+```
+
+---
+
+### `TrajetGare.php` (nouveau)
+
+```php
+<?php
+
+namespace App\Entity;
+
+use App\Repository\TrajetGareRepository;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
+
+#[ORM\Entity(repositoryClass: TrajetGareRepository::class)]
+#[ORM\UniqueConstraint(columns: ['trajet_id', 'gare_id'])]
+#[ORM\UniqueConstraint(columns: ['trajet_id', 'ordre'])]
+class TrajetGare
+{
+    #[ORM\Id, ORM\GeneratedValue, ORM\Column]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?int $id = null;
+
+    #[ORM\ManyToOne(inversedBy: 'trajetGares')]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private ?Trajet $trajet = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'RESTRICT')]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?Gare $gare = null;
+
+    // 0 = gare de départ, n-1 = gare d'arrivée
+    #[ORM\Column]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private int $ordre = 0;
+
+    #[ORM\Column]
+    #[Groups(['read:Trajet'])]
+    private bool $estDepart = false;
+
+    #[ORM\Column]
+    #[Groups(['read:Trajet'])]
+    private bool $estArrivee = false;
+
+    // ... getters/setters
+}
+```
+
+---
+
+### `TarifTroncon.php` (nouveau)
+
+```php
+<?php
+
+namespace App\Entity;
+
+use App\Repository\TarifTronconRepository;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Validator\Constraints as Assert;
+
+#[ORM\Entity(repositoryClass: TarifTronconRepository::class)]
+#[ORM\UniqueConstraint(columns: ['trajet_id', 'gare_depart_id', 'gare_arrivee_id'])]
+class TarifTroncon
+{
+    #[ORM\Id, ORM\GeneratedValue, ORM\Column]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?int $id = null;
+
+    #[ORM\ManyToOne(inversedBy: 'tarifTroncons')]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
+    private ?Trajet $trajet = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'RESTRICT')]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?Gare $gareDepart = null;  // gare d'embarquement
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false, onDelete: 'RESTRICT')]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?Gare $gareArrivee = null; // gare de descente
+
+    #[ORM\Column]
+    #[Assert\GreaterThan(0)]
+    #[Groups(['read:Trajet', 'read:Voyage'])]
+    private ?int $montant = null; // FCFA
+
+    #[ORM\Column(nullable: true)]
+    private ?int $identreprise = null;
+
+    // ... getters/setters
+}
+```
+
+---
+
+### `TrajetProcessor.php` (réécrit)
+
+```php
+<?php
+
+namespace App\State;
+
+// ... imports
+
+class TrajetProcessor implements ProcessorInterface
+{
+    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
+    {
+        /** @var TrajetInput $data */
+        $user         = $this->security->getUser();
+        $entrepriseId = $user->getEntreprise()->getId();
+
+        // 1. Dédoublonner et valider les gares
+        $gareIds = array_values(array_unique($data->gareIds));
+        // min 2 gares, toutes appartenant à l'entreprise ...
+
+        // 2. Unicité départ → arrivée via findTrajetEntreGares
+        $existant = $this->trajetRepository->findTrajetEntreGares(
+            $gareDepart->getId(), $gareArrivee->getId(), $entrepriseId
+        );
+        if ($existant) throw new ConflictHttpException(...);
+
+        // 3. Validation de chaque tronçon
+        // gareDepartId et gareArriveeId doivent faire partie de gareIds, montant > 0 ...
+
+        // 4. Construire le Trajet
+        $trajet = (new Trajet())
+            ->setIdentreprise($entrepriseId)
+            ->setCreatedBy($user->getId())
+            ->setCodeTrajet($this->generateCodeTrajet(...));
+
+        // TrajetGare — séquence ordonnée
+        foreach ($gareIds as $ordre => $gareId) {
+            $trajet->addTrajetGare(
+                (new TrajetGare())
+                    ->setGare($gares[$gareId])
+                    ->setOrdre($ordre)
+                    ->setEstDepart($ordre === 0)
+                    ->setEstArrivee($ordre === count($gareIds) - 1)
+            );
+        }
+
+        // TarifTroncon — un par paire déclarée
+        foreach ($data->troncons as $troncon) {
+            $trajet->addTarifTroncon(
+                (new TarifTroncon())
+                    ->setGareDepart($gares[$troncon['gareDepartId']])
+                    ->setGareArrivee($gares[$troncon['gareArriveeId']])
+                    ->setMontant((int)$troncon['montant'])
+                    ->setIdentreprise($entrepriseId)
+            );
+        }
+
+        return $this->processor->process($trajet, $operation, $uriVariables, $context);
+    }
+}
+```
+
+---
+
+### `TrajetRepository.php` — nouvelles méthodes
+
+```php
+// Vérification unicité basée sur TrajetGare (plus de strings provenance/destination)
+public function findTrajetEntreGares(int $gareDepartId, int $gareArriveeId, int $entrepriseId): ?Trajet
+{
+    return $this->createQueryBuilder('t')
+        ->innerJoin('t.trajetGares', 'tgd', 'WITH', 'tgd.estDepart = true AND tgd.gare = :gareDepart')
+        ->innerJoin('t.trajetGares', 'tga', 'WITH', 'tga.estArrivee = true AND tga.gare = :gareArrivee')
+        ->andWhere('t.identreprise = :ide')
+        ->andWhere('t.deletedAt IS NULL')
+        ->setParameter('gareDepart', $gareDepartId)
+        ->setParameter('gareArrivee', $gareArriveeId)
+        ->setParameter('ide', $entrepriseId)
+        ->getQuery()
+        ->getOneOrNullResult();
+}
+
+// findAllAvecStats : suppression de tr.provenance et tr.destination
+public function findAllAvecStats(...): array
+{
+    return $this->createQueryBuilder('tr')
+        ->select('tr.id', 'tr.codetrajet', 'COUNT(DISTINCT v.id) AS nbvoyages', ...)
+        // plus de tr.provenance ni tr.destination
+        ...
+}
+```
+
+---
+
+### `Voyage.php` — champ `gareDepart` remplace `provenance`/`destination`
+
+```php
+// Supprimés
+// private ?string $provenance = null;
+// private ?string $destination = null;
+
+// ✅ Nouveau
+#[ORM\ManyToOne]
+#[ORM\JoinColumn(nullable: true)]
+#[Groups(['read:Voyage', 'write:Voyage', 'read:Ticket', 'read:Bagage'])]
+private ?Gare $gareDepart = null;
+
+// OrderFilter : provenance et destination retirés
+#[ApiFilter(OrderFilter::class, properties: ['id', 'datedebut', 'placestotal', 'createdAt'])]
+```
+
+---
+
+### `VoyageProcessor.php` — bloc `Post` adapté
+
+```php
+if ($operation instanceof Post) {
+    $data->setIdentreprise($entrepriseId)->setCreatedBy($user->getId());
+
+    // Si gareDepart non fourni → on prend la gare de départ du trajet
+    if ($data->getGareDepart() === null) {
+        $data->setGareDepart($data->getTrajet()->getGareDepart());
+    }
+
+    $code = $this->em->getRepository(Voyage::class)->count([...]) + 1;
+    $data->setPlacesOccupees(0)->setCodevoyage($trajet->getCodetrajet() . '-V' . $code);
+    // ...
+}
+
+// Patch : validation provenance === destination supprimée
+```
+
+---
+
+### Migration `Version20260609000002`
+
+```sql
+-- Nouvelles tables
+CREATE TABLE trajet_gare (id, trajet_id, gare_id, ordre, est_depart, est_arrivee, ...)
+CREATE TABLE tarif_troncon (id, trajet_id, gare_depart_id, gare_arrivee_id, montant, ...)
+
+-- Nettoyage trajet
+ALTER TABLE trajet DROP COLUMN provenance, destination, tarif_id, orderindex
+
+-- Voyage : gare_depart remplace provenance/destination
+ALTER TABLE voyage DROP COLUMN provenance, destination
+ALTER TABLE voyage ADD gare_depart_id INT FK → gare.id ON DELETE SET NULL
+```
+
+---
+
+### `VoyageFormType.php` (réécrit)
+
+```php
+// Plus de champs provenance/destination, plus de gares en option
+// Le label du trajet est construit depuis trajetGares
+foreach ($options['trajets'] as $t) {
+    $gares = $t['trajetGares'] ?? [];
+    foreach ($gares as $tg) {
+        if ($tg['estDepart'])  $gareDepart  = $tg['gare']['libelle'];
+        if ($tg['estArrivee']) $gareArrivee = $tg['gare']['libelle'];
+    }
+    $label = $gareDepart . ' → ' . $gareArrivee . ' (' . $t['codetrajet'] . ')';
+    $trajetChoices[$label] = $t['id'];
+}
+
+// Champs : trajet + datedebut + car (optionnel)
+```
+
+---
+
+### `VoyageController::new` (adapté)
+
+```php
+// Plus de chargement des gares
+$trajets = $this->api->collection('/api/trajets');
+$cars    = $this->api->get('/api/cars', ['etat' => 'DISPONIBLE']);
+
+// Payload simplifié — plus de provenance/destination
+$payload = [
+    'datedebut' => $form->get('datedebut')->getData()?->format('Y-m-d\TH:i:s.v\Z'),
+    'trajet'    => '/api/trajets/' . $form->get('trajet')->getData()
+];
+// + car optionnel
+```
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+- - 
 Bonne question sur les stats. Voici le raisonnement :
 
 **Soft delete seul** — le ticket disparaît des requêtes sans `deletedAt IS NULL`, donc les stats l'excluent automatiquement. ✅ Simple mais tu perds la distinction entre "supprimé" et "annulé".
@@ -829,6 +2001,565 @@ public function desistement(int $id, Request $request): Response
 Le désistement crée une chaîne traçable : `ticketOriginal (DESISTE) → ticketNouveau (ACTIF)`. Les stats comptent le ticket original comme vendu (il reste en base avec `statut = DESISTE`) et comptent aussi le nouveau ticket. Le siège de l'ancien voyage est libéré immédiatement. Le prix est recalculé selon le tarif du nouveau trajet.
 
 
+
+
+
+
+
+
+Le flux le plus adapté est **l'autocomplete sur le codeticket ou nomclient** pour ces raisons :
+
+- L'agent au chargement a le ticket physique du client devant lui → il peut scanner/saisir le code directement
+- Chercher par voyage puis ticket ajoute une étape inutile
+- L'autocomplete via `/autocomplete/tickets?q=xxx` cherche sur `codeticket` ET `nomclient` simultanément — flexible
+
+Le flux devient :
+
+```
+Agent saisit les 3 premiers caractères du codeticket ou nom du client
+        ↓
+Autocomplete retourne les tickets correspondants du voyage en cours
+        ↓
+Agent sélectionne → nomclient et contactclient pré-remplis automatiquement
+        ↓
+Agent saisit nature, type, valeur → tarif calculé automatiquement
+```
+
+---
+
+Voici tous les changements :
+
+---
+
+## 1. Entité `Bagage` — modifications
+
+```php
+// poids nullable
+#[ORM\Column(type: 'decimal', precision: 8, scale: 2, nullable: true)]
+#[Groups(['read:Bagage', 'write:BagageInput'])]
+private ?string $poids = null;
+
+// valeur déclarée — base du calcul tarifaire
+#[ORM\Column]
+#[Groups(['read:Bagage', 'write:BagageInput'])]
+private ?int $valeur = null;
+
+// codeticket lié
+#[ORM\Column(length: 255, nullable: true)]
+#[Groups(['read:Bagage', 'write:BagageInput'])]
+private ?string $codeticket = null;
+```
+
+---
+
+## 2. `Tarifbagage` — renommer les champs poids → valeur
+
+```php
+// poidsmin → valeurmin
+#[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
+#[Groups(['read:Tarifbagage', 'read:Bagage', 'write:Tarifbagage', 'write:Tarifbagage:update'])]
+private ?string $valeurmin = null;
+
+// poidsmax → valeurmax
+#[ORM\Column(type: 'decimal', precision: 10, scale: 2, nullable: true)]
+#[Groups(['read:Tarifbagage', 'read:Bagage', 'write:Tarifbagage', 'write:Tarifbagage:update'])]
+private ?string $valeurmax = null;
+```
+
+---
+
+## 3. `TarifbagageRepository` — méthode basée sur la valeur
+
+```php
+public function findTarifForValeur(int $valeur, int $identreprise): ?Tarifbagage
+{
+    return $this->createQueryBuilder('t')
+        ->where('t.identreprise = :identreprise')
+        ->andWhere('t.deletedAt IS NULL')
+        ->andWhere('t.valeurmin <= :valeur')
+        ->andWhere('t.valeurmax IS NULL OR t.valeurmax >= :valeur')
+        ->setParameter('identreprise', $identreprise)
+        ->setParameter('valeur', $valeur)
+        ->orderBy('t.valeurmin', 'ASC')
+        ->setMaxResults(1)
+        ->getQuery()
+        ->getOneOrNullResult();
+}
+```
+
+Les méthodes `findTrancheIllimitee` et `findChevauchement` utilisent maintenant `valeurmin/valeurmax` — renommer les paramètres en conséquence.
+
+---
+
+## 4. `BagageInput` — modifications
+
+```php
+#[Assert\NotNull]
+#[Groups(['write:BagageInput'])]
+public int $voyage;
+
+#[Assert\NotBlank]
+#[Groups(['write:BagageInput'])]
+public string $nomclient;
+
+#[Assert\NotBlank]
+#[Groups(['write:BagageInput'])]
+public string $contactclient;
+
+#[Assert\NotBlank]
+#[Groups(['write:BagageInput'])]
+public string $nature;
+
+#[Assert\NotBlank]
+#[Assert\Choice(choices: ['LEGER', 'LOURD', 'VOLUMINEUX', 'FRAGILE'])]
+#[Groups(['write:BagageInput'])]
+public string $type;
+
+// poids nullable
+#[Groups(['write:BagageInput'])]
+public ?float $poids = null;
+
+// valeur déclarée — obligatoire pour le calcul tarifaire
+#[Assert\NotNull]
+#[Assert\Positive]
+#[Groups(['write:BagageInput'])]
+public int $valeur;
+
+// montant forcé optionnel
+#[Assert\PositiveOrZero]
+#[Groups(['write:BagageInput'])]
+public ?int $montant = null;
+
+// codeticket lié optionnel
+#[Groups(['write:BagageInput'])]
+public ?string $codeticket = null;
+```
+
+---
+
+## 5. `BagageProcessor` — calcul basé sur la valeur
+
+```php
+private function resoudreMontant(int $valeur, ?int $montantFourni, int $identreprise): array
+{
+    $tarifbagage = $this->tarifbagageRepository->findTarifForValeur($valeur, $identreprise);
+
+    if ($tarifbagage !== null) {
+        $montantCalcule = $tarifbagage->getMontant();
+        if ($montantFourni !== null && $montantFourni !== $montantCalcule) {
+            return [$montantFourni, $tarifbagage, true];
+        }
+        return [$montantCalcule, $tarifbagage, false];
+    }
+
+    if ($montantFourni === null) {
+        throw new BadRequestHttpException(
+            'Aucun tarif trouvé pour une valeur de ' . $valeur . ' FCFA. Veuillez saisir le montant manuellement.'
+        );
+    }
+
+    return [$montantFourni, null, true];
+}
+```
+
+Dans `handlePost` et `handlePatch`, remplacer `$data->poids` par `$data->valeur` :
+
+```php
+[$montant, $tarifbagage, $montantforce] = $this->resoudreMontant(
+    $data->valeur,      // ← valeur au lieu de poids
+    $data->montant,
+    $identreprise
+);
+
+$bagage
+    ->setPoids($data->poids !== null ? (string) $data->poids : null)  // nullable
+    ->setValeur($data->valeur)
+    ->setCodeticket($data->codeticket)
+    // ...
+```
+
+---
+
+## 6. `AutocompleteController` — endpoint tickets
+
+```php
+#[Route('/tickets', name: 'tickets', methods: ['GET'])]
+public function tickets(Request $request): JsonResponse
+{
+    return $this->search('/api/tickets', $request, [
+        'q'    => 'codeticket',  // SearchFilter partial sur codeticket
+        'text' => fn($item) => $item['codeticket']
+            . ' — ' . ($item['nomclient'] ?? 'Client inconnu')
+            . ' (' . ($item['voyage']['codevoyage'] ?? '') . ')',
+        'extra_filters' => [
+            'voyage.datefin' => null, // uniquement voyages non clôturés si filtre disponible
+        ]
+    ]);
+}
+```
+
+---
+
+## 7. Frontend — `bagage/_form.html.twig`
+
+Remplacer le champ voyage par le select ticket avec autocomplete + pré-remplissage automatique :
+
+```twig
+<div class="card p-6">
+    <h2 class="text-lg font-semibold mb-4">Client</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        {# Autocomplete ticket #}
+        <div class="form-group sm:col-span-2">
+            <label class="form-label" for="codeticket">
+                Ticket du client (optionnel)
+            </label>
+            <input
+                type="text"
+                id="codeticket-search"
+                class="input"
+                placeholder="Saisir le code ticket ou nom du client..."
+                data-controller="api-select"
+                data-api-select-url-value="{{ path('autocomplete.tickets') }}"
+                data-api-select-placeholder-value="Rechercher un ticket..."
+                autocomplete="off"
+            >
+            {# Champ caché pour stocker le codeticket sélectionné #}
+            <input type="hidden" name="codeticket" id="codeticket"
+                   value="{{ bagage.codeticket ?? '' }}">
+        </div>
+
+        {# Voyage — rempli automatiquement depuis le ticket ou saisi manuellement #}
+        <div class="form-group">
+            <label class="form-label" for="voyage">
+                Voyage <span class="text-red-500">*</span>
+            </label>
+            <select id="voyage" name="voyage" class="input" required
+                    data-controller="api-select"
+                    data-api-select-url-value="{{ path('autocomplete.voyages') }}"
+                    data-api-select-placeholder-value="Rechercher un voyage...">
+                {% if bagage is not null and bagage.voyage is defined %}
+                    <option value="{{ bagage.voyage.id }}" selected>
+                        {{ bagage.voyage.codevoyage }}
+                    </option>
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="nomclient">
+                Nom du client <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="nomclient" name="nomclient" class="input"
+                   value="{{ bagage.nomclient ?? '' }}" required>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="contactclient">
+                Contact <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="contactclient" name="contactclient" class="input"
+                   value="{{ bagage.contactclient ?? '' }}" required>
+        </div>
+    </div>
+</div>
+```
+
+---
+
+## 8. Stimulus controller — pré-remplissage depuis ticket sélectionné
+
+```javascript
+// assets/controllers/ticket_bagage_controller.js
+import { Controller } from '@hotwired/stimulus'
+
+export default class extends Controller {
+    static targets = ['codeticket', 'voyage', 'nomclient', 'contactclient']
+
+    selectTicket(event) {
+        const ticket = event.detail  // {id, codeticket, nomclient, contactclient, voyage}
+        if (!ticket) return
+
+        // Pré-remplir les champs
+        this.codeticketTarget.value    = ticket.codeticket
+        this.nomclientTarget.value     = ticket.nomclient ?? ''
+        this.contactclientTarget.value = ticket.contactclient ?? ''
+
+        // Pré-remplir le voyage si disponible
+        if (ticket.voyage) {
+            const option = new Option(
+                ticket.voyage.codevoyage,
+                ticket.voyage.id,
+                true,
+                true
+            )
+            this.voyageTarget.tomselect?.addOption({ value: ticket.voyage.id, text: ticket.voyage.codevoyage })
+            this.voyageTarget.tomselect?.setValue(ticket.voyage.id)
+        }
+    }
+}
+```
+
+Et dans `AutocompleteController` — enrichir la réponse tickets avec les données du client :
+
+```php
+#[Route('/tickets', name: 'tickets', methods: ['GET'])]
+public function tickets(Request $request): JsonResponse
+{
+    $query = trim($request->query->get('query', ''));
+
+    $params = [
+        'codeticket' => $query,
+        'itemsPerPage' => 10,
+    ];
+
+    try {
+        $items = $this->api->collection('/api/tickets', $params);
+    } catch (ApiException) {
+        return $this->json(['results' => []]);
+    }
+
+    $results = array_map(fn($item) => [
+        'value'         => $item['codeticket'],
+        'text'          => $item['codeticket'] . ' — ' . ($item['nomclient'] ?? '?'),
+        // Données supplémentaires pour le pré-remplissage
+        'nomclient'     => $item['nomclient'] ?? '',
+        'contactclient' => $item['contactclient'] ?? '',
+        'voyage'        => $item['voyage'] ?? null,
+    ], $items);
+
+    return $this->json(['results' => $results]);
+}
+```
+
+---
+
+## 9. Migration
+
+```bash
+php bin/console make:migration
+php bin/console doctrine:migrations:migrate
+```
+
+N'oublie pas de renommer les champs dans `TarifbagageFormType` (`poidsmin/poidsmax` → `valeurmin/valeurmax`) et dans `TarifbagageTable.tsx`. Quelle est la suite ?
+
+
+
+
+
+
+
+
+
+Tu as raison — si un colis est perdu la compagnie doit rembourser sa valeur, donc **le montant ne change pas** (c'est la dette de la compagnie). Le recalcul n'a pas de sens ici.
+
+On garde donc :
+- Montant inchangé
+- Statut `PERDU` sur le `Detailcourrier`
+- Si tous les colis sont `PERDU` → `Courrier` passe automatiquement à `PERDU`
+
+---
+
+## Backend
+
+### Ajout `statut` dans `Detailcourrier`
+
+```php
+public const STATUT_NORMAL = 'NORMAL';
+public const STATUT_PERDU  = 'PERDU';
+
+#[ORM\Column(length: 50)]
+#[Groups(['read:Detailcourrier', 'read:Courrier'])]
+private string $statut = self::STATUT_NORMAL;
+
+public function getStatut(): string { return $this->statut; }
+public function setStatut(string $statut): static { $this->statut = $statut; return $this; }
+```
+
+---
+
+### Endpoint dans `Detailcourrier`
+
+```php
+new Patch(
+    security: "is_granted('MODIFIER', object)",
+    uriTemplate: '/detailcourriers/{id}/perdu',
+    requirements: ['id' => '\d+'],
+    input: false,
+    processor: PerduDetailcourrierProcessor::class,
+    openapi: new Operation(
+        summary: 'Déclarer un colis comme perdu',
+        description: 'Marque le colis comme perdu et met à jour le statut du courrier si nécessaire',
+        security: [['bearerAuth' => []]]
+    )
+),
+```
+
+---
+
+### `PerduDetailcourrierProcessor`
+
+```php
+<?php
+
+namespace App\State;
+
+use ApiPlatform\Metadata\Operation;
+use ApiPlatform\State\ProcessorInterface;
+use App\Domain\Enum\CourrierStatus;
+use App\Entity\Detailcourrier;
+use App\Entity\User;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+
+class PerduDetailcourrierProcessor implements ProcessorInterface
+{
+    public function __construct(
+        private ProcessorInterface $processor,
+        private Security $security,
+        private EntityManagerInterface $em
+    ) {}
+
+    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
+    {
+        /** @var Detailcourrier $data */
+        /** @var User $user */
+        $user = $this->security->getUser();
+
+        // Un colis déjà perdu ne peut pas être re-déclaré perdu
+        if ($data->getStatut() === Detailcourrier::STATUT_PERDU) {
+            throw new BadRequestHttpException('Ce colis est déjà déclaré perdu');
+        }
+
+        // Le courrier doit être en transit ou réceptionné pour déclarer un colis perdu
+        $courrier = $data->getCourrier();
+        if (!in_array($courrier->getStatut(), [
+            CourrierStatus::STATUT_EN_TRANSIT->value,
+            CourrierStatus::STATUT_RECEPTIONNE->value,
+        ])) {
+            throw new BadRequestHttpException(
+                'Un colis ne peut être déclaré perdu que si le courrier est en transit ou réceptionné'
+            );
+        }
+
+        // Marquer le colis comme perdu
+        $data->setStatut(Detailcourrier::STATUT_PERDU);
+
+        // Vérifier si tous les colis sont perdus
+        $tousLesColissPerdus = true;
+        foreach ($courrier->getDetailcourriers() as $detail) {
+            // Exclure le colis actuel (déjà mis à jour en mémoire)
+            if ($detail->getId() === $data->getId()) continue;
+
+            if ($detail->getStatut() !== Detailcourrier::STATUT_PERDU) {
+                $tousLesColissPerdus = false;
+                break;
+            }
+        }
+
+        if ($tousLesColissPerdus) {
+            $courrier->setStatut(CourrierStatus::STATUT_PERDU->value);
+            $this->em->persist($courrier);
+        }
+
+        return $this->processor->process($data, $operation, $uriVariables, $context);
+    }
+}
+```
+
+---
+
+### Migration
+
+```bash
+php bin/console make:migration
+php bin/console doctrine:migrations:migrate
+```
+
+---
+
+## Frontend
+
+### Route dans `CourrierController`
+
+```php
+#[Route('/colis/{id}/perdu', name: 'colis.perdu', methods: ['POST'], requirements: ['id' => Requirement::DIGITS])]
+#[IsGranted('COURRIER_MODIFIER')]
+public function colisPerdu(int $id, Request $request): Response
+{
+    $courrierId = $request->request->get('courrier_id');
+
+    try {
+        $this->api->patch('/api/detailcourriers/' . $id . '/perdu');
+        $this->addFlash('success', 'Le colis a été déclaré perdu');
+    } catch (ApiException $e) {
+        $response = $this->apiExceptionHandler->handle($e, null, 'courrier.show', ['id' => $courrierId]);
+        if ($response) return $response;
+    }
+
+    return $this->redirectToRoute('courrier.show', ['id' => $courrierId]);
+}
+```
+
+---
+
+### Dans `courrier/show.html.twig` — table des colis
+
+```twig
+{% set typeMap = {
+    NORMAL:     ['Normal',     'bg-gray-100 text-gray-700'],
+    FRAGILE:    ['Fragile',    'bg-yellow-50 text-yellow-700'],
+    VOLUMINEUX: ['Volumineux', 'bg-purple-50 text-purple-700']
+} %}
+
+{% for detail in courrier.detailcourriers %}
+{% set tc = typeMap[detail.type] ?? [detail.type, 'bg-gray-100 text-gray-700'] %}
+<tr class="hover:bg-muted/20 transition-colors {{ detail.statut == 'PERDU' ? 'opacity-60' : '' }}">
+    <td class="px-4 py-3">{{ detail.nature }}</td>
+    <td class="px-4 py-3 font-medium">{{ detail.designation }}</td>
+    <td class="px-4 py-3 text-muted-foreground">{{ detail.emballage ?? '—' }}</td>
+    <td class="px-4 py-3">
+        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ tc[1] }}">
+            {{ tc[0] }}
+        </span>
+    </td>
+    <td class="px-4 py-3 text-muted-foreground">{{ detail.poids ? detail.poids ~ ' kg' : '—' }}</td>
+    <td class="px-4 py-3 tabular-nums">{{ detail.valeur|number_format(0, ',', ' ') }} FCFA</td>
+    <td class="px-4 py-3 text-right tabular-nums font-semibold">
+        {{ detail.montant|number_format(0, ',', ' ') }} FCFA
+    </td>
+    <td class="px-4 py-3">
+        {% if detail.statut == 'PERDU' %}
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                Perdu
+            </span>
+        {% else %}
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800">
+                Normal
+            </span>
+        {% endif %}
+    </td>
+    <td class="px-4 py-3">
+        {% if is_granted('COURRIER_MODIFIER')
+            and detail.statut == 'NORMAL'
+            and courrier.statut in ['EN_TRANSIT', 'RECEPTIONNE'] %}
+        <form method="POST"
+              action="{{ path('courrier.colis.perdu', { id: detail.id }) }}"
+              class="inline"
+              onsubmit="return confirm('Déclarer ce colis comme perdu ?')">
+            <input type="hidden" name="courrier_id" value="{{ courrier.id }}">
+            <button type="submit" class="btn btn-danger btn-sm">
+                Déclarer perdu
+            </button>
+        </form>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
+```
+
+Quelle est la suite ?
 
 
 

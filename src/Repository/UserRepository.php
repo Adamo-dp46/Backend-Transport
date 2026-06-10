@@ -40,7 +40,8 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->leftJoin('ur.role', 'r')
             ->leftJoin('r.permissions', 'p')
             ->leftJoin('u.entreprise', 'e')
-            ->addSelect('ur', 'r', 'p', 'e')
+            ->leftJoin('u.gare', 'g')
+            ->addSelect('ur', 'r', 'p', 'e', 'g')
             ->where('u.id = :id')
             ->setParameter('id', $id)
             ->getQuery()
@@ -48,8 +49,8 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         ;
     }
 
-    // -- Inventaire -- //
-
+    /* Inventaire
+     */
     public function findInfosByIds(array $ids): array
     {
         if(empty($ids)) {
@@ -60,25 +61,24 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->andWhere('u.id IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->getArrayResult();
-
-        // Index par id pour lookup rapide
-        $index = [];
-        foreach ($rows as $row) {
+            ->getArrayResult()
+        ;
+        $index = []; /*
+            - On.. index par 'id' pour lookup rapide
+        */
+        foreach($rows as $row) {
             $index[$row['id']] = $row;
         }
-
         return $index;
     }
 
-    // -- Statistiques -- //
-
+    /* Statistiques
+     */
     public function countTotal(int $identreprise): int
     {
         return (int) $this->createQueryBuilder('u')
             ->select('COUNT(u.id)')
             ->andWhere('u.entreprise = :ide')
-            // ->andWhere('u.etat = true')
             ->setParameter('ide', $identreprise)
             ->getQuery()
             ->getSingleScalarResult();
@@ -89,7 +89,6 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
         return $this->createQueryBuilder('u')
             ->select('u.id, u.nom, u.prenom')
             ->andWhere('u.entreprise = :ide')
-            // ->andWhere('u.etat = true')
             ->setParameter('ide', $identreprise)
             ->orderBy('u.nom', 'ASC')
             ->getQuery()

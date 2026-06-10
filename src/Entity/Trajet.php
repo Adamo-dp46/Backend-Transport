@@ -110,10 +110,6 @@ class Trajet extends EntityBase implements EntrepriseOwnedInterface, HasSoftDele
     #[Groups(['read:Trajet', 'read:Voyage'])]
     private ?string $destination = null; // Ou.. !! 'gare_arrivee
 
-    #[ORM\Column(nullable: true)]
-    #[Groups(['read:Trajet'])]
-    private ?int $orderindex = null;
-
     #[ORM\ManyToOne(inversedBy: 'trajets')]
     #[ORM\JoinColumn(nullable: false)] // onDelete: 'RESTRICT'
     #[Groups(['read:Trajet', 'write:Trajet'])]
@@ -170,18 +166,6 @@ class Trajet extends EntityBase implements EntrepriseOwnedInterface, HasSoftDele
     public function setDestination(string $destination): static
     {
         $this->destination = $destination;
-
-        return $this;
-    }
-
-    public function getOrderindex(): ?int
-    {
-        return $this->orderindex;
-    }
-
-    public function setOrderindex(int $orderindex): static
-    {
-        $this->orderindex = $orderindex;
 
         return $this;
     }
