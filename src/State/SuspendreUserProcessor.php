@@ -46,10 +46,12 @@ class SuspendreUserProcessor implements ProcessorInterface
 
         if(in_array('ROLE_ADMIN_GARE', $data->getRoles(), true) && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true) && !in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true)
         ) {
-            throw new BadRequestHttpException('Seul un administrateur peut suspendre un administrateur de gare');
+            throw new BadRequestHttpException('Seul un administrateur peut suspendre un autre administrateur de gare');
         }
 
-        if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true)) { // On.. ' && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true)'
+        if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true) && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true)) { /*
+            - Le ' && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true)' permet d'empêcher qu'un administrateur vois les options d'un administrateur de gare vu qu'il bypass
+        */
             if($data->getGare()?->getId() !== $currentUser->getGare()?->getId()) {
                 throw new BadRequestHttpException('Vous ne pouvez suspendre que les utilisateurs de votre gare');
             }

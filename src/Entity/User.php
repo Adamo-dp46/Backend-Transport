@@ -112,7 +112,7 @@ use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
             )
         ),
         new Patch(
-            security: "is_granted('ROLE_ADMIN') or is_granted('ROLE_SUPER_ADMIN')",
+            security: "is_granted('ROLE_ADMIN') or is_granted('ROLE_SUPER_ADMIN') or is_granted('ROLE_ADMIN_GARE')",
             uriTemplate: '/users/{id}/suspendre',
             requirements: ['id' => '\d+'],
             input: false,

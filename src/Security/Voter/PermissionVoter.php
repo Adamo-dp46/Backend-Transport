@@ -39,6 +39,11 @@ final class PermissionVoter extends Voter
         } /*
             - $user = $this->userRepository->find($user->getId()); - Permet d'avoir les 'userRoles' si on utilise le provider 'jwt' ensuite vérifié si l'utilisateur existe
         */
+        if(in_array('ROLE_ADMIN_GARE', $user->getRoles(), true)) {
+            return true; /*
+                - L'administrateur de gare a un bypass vu qu'il n'a pas besoin de 'userRoles', son périmètre va être restreint au niveau 'GareScopeExtension' et des processors
+            */
+        }
         $entityName = $this->resolveEntityName($subject); /*
             - Plus rapide que 'ReflectionClass'
         */

@@ -50,7 +50,9 @@ class UserProcessor implements ProcessorInterface
         }
 
         if($operation instanceof Post) {
-            $data->setEntreprise($entreprise); // On lui affecte l'entreprise de l'utilisateur qui l'a crée
+            $data->setEntreprise($entreprise); /*
+                - On lui affecte l'entreprise de l'utilisateur qui l'a crée
+            */
             if($data->getGare() !== null) {
                 $gare = $this->gareRepository->find($data->getGare()->getId());
                 if($gare) {
@@ -76,6 +78,15 @@ class UserProcessor implements ProcessorInterface
 
             if($data->isFounder() && !$currentUser->isFounder()) {
                 throw new AccessDeniedHttpException('Seul le fondateur peut modifier son propre compte');
+            }
+
+            if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true)) {
+                if($data->getGare()?->getId() !== $currentUser->getGare()?->getId()) {
+                    throw new AccessDeniedHttpException('Vous ne pouvez modifier que les utilisateurs de votre gare.'); /*
+                        - Un administrateur de gare ne peut pas modifier un utilisateur d'une autre gare
+                    */
+                }
+                $data->setGare($currentUser->getGare());
             }
 
             $existingRoles = $this->em->getRepository(UserRole::class)->findBy([

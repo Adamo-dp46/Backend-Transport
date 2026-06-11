@@ -26,10 +26,7 @@ class PromouvoirAdminGareProcessor implements ProcessorInterface
          * @var User
          */
         $currentUser = $this->security->getUser();
-        if(!in_array('ROLE_ADMIN', $currentUser->getRoles(), true)) {
-            throw new AccessDeniedHttpException('Seul un administrateur peut nommer un administrateur de gare.');
-        }
-
+ 
         if($data->getId() === $currentUser->getId()) {
             throw new BadRequestHttpException('Vous ne pouvez pas modifier votre propre rôle.');
         }
