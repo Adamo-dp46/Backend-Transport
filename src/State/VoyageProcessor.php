@@ -12,9 +12,11 @@ use App\Entity\Siege;
 use App\Entity\Ticket;
 use App\Entity\User;
 use App\Entity\Voyage;
+use App\Security\VoyageGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class VoyageProcessor implements ProcessorInterface
 {
@@ -22,7 +24,8 @@ class VoyageProcessor implements ProcessorInterface
         private ProcessorInterface $processor,
         private Security $security,
         private EntityManagerInterface $em,
-        private CarStatutService $carStatutService
+        private CarStatutService $carStatutService,
+        private VoyageGuard $guard
     )
     {
     }
@@ -38,24 +41,42 @@ class VoyageProcessor implements ProcessorInterface
         $entrepriseId = $user->getEntreprise()->getId();
 
         if($operation instanceof Post) {
-            if($data->getProvenance() === $data->getDestination()) {
-                throw new BadRequestHttpException('La provenance et la destination ne peuvent pas être identiques');
+            $ligne = $data->getLigne();
+            if(!$ligne) {
+                throw new BadRequestHttpException('La ligne est obligatoire pour créer un voyage');
             }
-            // $trajet = $data->getTrajet();
+
+            // Préparation interdite à la gare de destination de la ligne
+            $this->guard->assertPeutGerer($user, $data);
+
+            // Provenance / destination dérivées de la ligne (origine -> terminus)
+            $data
+                ->setProvenance($ligne->getGareorigine()->getLibelle())
+                ->setDestination($ligne->getGareterminus()->getLibelle());
+
+            // Unicité : pas 2 voyages sur la même ligne au même départ
+            $existant = $this->em->getRepository(Voyage::class)->findOneBy([
+                'ligne' => $ligne,
+                'datedebut' => $data->getDatedebut(),
+                'identreprise' => $entrepriseId,
+                'deletedAt' => null
+            ]);
+            if($existant) {
+                throw new ConflictHttpException('Un voyage existe déjà pour cette ligne à cette date');
+            }
+
             $data
                 ->setIdentreprise($entrepriseId)
                 ->setCreatedBy($user->getId())
             ;
-            // >setDestination($trajet->getDestination()); -- !!
 
             $code = $this->em->getRepository(Voyage::class)->count([
-                'trajet' => $data->getTrajet(),
+                'ligne' => $ligne,
                 'identreprise' => $entrepriseId,
                 'deletedAt' => null
             ]) + 1;
             $data
-                ->setPlacesOccupees(0)
-                ->setCodevoyage($data->getTrajet()->getCodetrajet() . '-V' . $code); /*
+                ->setCodevoyage($ligne->getCodeligne() . '-V' . $code); /*
                 - On peut avoir un problème de concurrence '2 créations en même temps' donc à améliorer
             */
             if($data->getCar()) {
@@ -92,12 +113,17 @@ class VoyageProcessor implements ProcessorInterface
                 }
             */
             if($data->getDatefin() !== null) {
+                // Clôture : réservée à la gare de destination (terminus) — ni la provenance, ni une gare intermédiaire
+                $this->guard->assertPeutCloturer($user, $data);
                 if($data->getCar()) {
                     $this->carStatutService->mettreDisponible($data->getCar()); /*
                         - Le car devient disponible lors de la clôturation du voyage
                     */
                 }
             } else {
+                // Modification (hors clôture) : interdite à la gare de destination
+                $this->guard->assertPeutGerer($user, $data);
+
                 $oldCarId = $original['car_id'] ?? null; /*
                     - On récupère l'ancine car en cas de changement de car
                 */
@@ -140,7 +166,6 @@ class VoyageProcessor implements ProcessorInterface
                                 - Si le siège n'existe pas dans le nouveau car ou capacité différente.. déjà gérer
                             */
                         }
-                        $data->setPlacesOccupees(count($tickets));
                     }
                     $this->getCar($data);
                 } /*
@@ -180,8 +205,8 @@ class VoyageProcessor implements ProcessorInterface
             }
 
             $places = $data->getCar()->getNbrSiege();
-            if($data->getPlacesOccupees() > $places) { /*
-                - On vérifie que les places déjà occupées ne dépassent pas celui du nouveau car en cas de 'patch'
+            if($data->getTicketsCount() > $places) { /*
+                - On vérifie que les billets déjà vendus ne dépassent pas la capacité du nouveau car en cas de 'patch'
             */
                 throw new BadRequestHttpException('Impossible de changer de Car : les places déjà occupées dépassent la capacité du nouveau véhicule');
             }

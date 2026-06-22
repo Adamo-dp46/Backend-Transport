@@ -31,7 +31,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['poidsmin' => 'ASC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Tarifbagage') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Tarifbagage') or is_granted('VOIR', 'Bagage')",
             openapi: new Operation(
                 summary: 'Liste des tarifs bagage',
                 description: 'Permet de voir la liste des tarifs bagage',

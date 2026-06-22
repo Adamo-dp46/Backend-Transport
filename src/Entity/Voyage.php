@@ -14,9 +14,11 @@ use ApiPlatform\Metadata\Link;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\OpenApi\Model\Operation;
+use App\Domain\Enum\TicketStatus;
 use App\Entity\Dto\AffectcarInput;
 use App\Entity\Dto\AffectpersonnelInput;
 use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Entity\Interface\LigneGareScopedInterface;
 use App\Entity\Interface\HasSoftDeleteGuard;
 use App\Entity\Output\Bordereau\BordereauOutput;
 use App\Entity\Output\Bordereau\Chauffeur\BordereauChauffeurOutput;
@@ -26,20 +28,19 @@ use App\State\AffectcarProcessor;
 use App\State\AffectpersonnelProcessor;
 use App\State\BordereauChauffeurProvider;
 use App\State\BordereauProvider;
+use App\State\ReceptionnerVoyageProcessor;
 use App\State\SoftDeleteProcessor;
 use App\State\VoyageProcessor;
-use App\State\VoyageTrajetProvider;
-use App\Validator\UniquePerEntreprise;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: VoyageRepository::class)]
-#[UniquePerEntreprise(
-    fields: ['datedebut', 'trajet'], // Pour ne pas avoir 2 voyages du même trajet au même moment
-    message: 'Un voyage exisite déjà pour ce trajet en ce moment'
-)]
+/*
+    - L'unicité (datedebut, ligne) est vérifiée dans 'VoyageProcessor' : robuste à la transition
+      trajet -> ligne, la ligne étant résolue dans le processor (et non au moment de la validation).
+*/
 // #[ORM\UniqueConstraint(columns: ['codevoyage', 'identreprise'])] -- Va causé problème à cause du 'deletedAt'
 #[ApiResource(
     security: "is_granted('IS_AUTHENTICATED_FULLY')",
@@ -58,7 +59,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
             )
         ),
         new Get(
-            security: "is_granted('VOIR', object) or is_granted('ROLE_USER')", // On.. pour la partie ticket
+            security: "is_granted('VOIR', object) or is_granted('ROLE_USER')",
             requirements: ['id' => '\d+'],
             openapi: new Operation(
                 summary: 'Le voyage',
@@ -95,6 +96,18 @@ use Symfony\Component\Serializer\Attribute\Groups;
             openapi: new Operation(
                 summary: 'Mise en corbeille du voyage',
                 description: 'Permet de mettre un voyage en corbeille',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
+            security: "is_granted('ROLE_USER')",
+            uriTemplate: '/voyages/{id}/receptionner',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: ReceptionnerVoyageProcessor::class,
+            openapi: new Operation(
+                summary: 'Réceptionner un voyage à sa gare',
+                description: 'L\'agent confirme le passage du véhicule à sa gare : les courriers et bagages qui y descendent sont réceptionnés/livrés automatiquement',
                 security: [['bearerAuth' => []]]
             )
         ),
@@ -154,25 +167,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
                 security: [['bearerAuth' => []]]
             )
         ),
-        new Get(
-            uriTemplate: '/trajets/{id}/voyages',
-            uriVariables: [
-                'id' => new Link(fromClass: Trajet::class)
-            ],
-            security: "is_granted('VOIR', 'Trajet')",
-            provider: VoyageTrajetProvider::class,
-            /*
-                paginationEnabled: true,
-                paginationClientItemsPerPage: true,
-                paginationItemsPerPage: 30,
-                paginationMaximumItemsPerPage: 50,
-            */
-            openapi: new Operation(
-                summary: 'La liste des voyages d\'un trajet',
-                description: 'Permet de voir la liste des voyages d\'un trajet',
-                security: [['bearerAuth' => []]]
-            )
-        ),
     ],
     openapi: new Operation(
         security: [['bearerAuth' => []]]
@@ -180,7 +174,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 )]
 #[ApiFilter(SearchFilter::class, properties: [
     'codevoyage' => 'partial',
-    'trajet.id' => 'exact',
+    'ligne.id' => 'exact',
     'car.id' => 'exact',
     'datefin' => 'exact'
 ])]
@@ -199,8 +193,13 @@ use Symfony\Component\Serializer\Attribute\Groups;
 #[ApiFilter(PersonnelFilter::class)] /*
     - On.. filtre qui fais un join sur 'Detailpersonnel' via 'personnel.id' pour récupérer les voyages du personnel
 */
-class Voyage extends EntityBase implements EntrepriseOwnedInterface, HasSoftDeleteGuard
+class Voyage extends EntityBase implements EntrepriseOwnedInterface, HasSoftDeleteGuard, LigneGareScopedInterface
 {
+    public static function ligneScopePath(): array
+    {
+        return ['ligne'];
+    }
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -224,13 +223,13 @@ class Voyage extends EntityBase implements EntrepriseOwnedInterface, HasSoftDele
     private ?\DateTimeImmutable $datedebut = null; // 'date départ'
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['read:Voyage', 'write:Voyage', 'write:Voyage:update', 'read:Personnel'])]
+    #[Groups(['read:Voyage', 'write:Voyage', 'write:Voyage:update', 'read:Personnel', 'read:Ticket'])]
     private ?\DateTimeImmutable $datefin = null;
 
     #[ORM\ManyToOne(inversedBy: 'voyages')]
-    #[ORM\JoinColumn(nullable: false)] // onDelete: 'CASCADE'
-    #[Groups(['read:Voyage', 'write:Voyage'])]
-    private ?Trajet $trajet = null;
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['read:Voyage', 'write:Voyage', 'read:Ticket'])]
+    private ?Ligne $ligne = null;
 
     #[ORM\ManyToOne(inversedBy: 'voyages')]
     // #[ORM\JoinColumn(nullable: false)]  -- onDelete: 'RESTRICT'
@@ -258,11 +257,6 @@ class Voyage extends EntityBase implements EntrepriseOwnedInterface, HasSoftDele
     #[Groups(['read:Voyage'])]
     // #[Assert\PositiveOrZero]
     private ?int $placestotal = null;
-
-    #[ORM\Column(nullable: true)]
-    #[Groups(['read:Voyage'])]
-    // #[Assert\PositiveOrZero]
-    private ?int $placesoccupees = null;
 
     /**
      * @var Collection<int, Courrier>
@@ -351,14 +345,14 @@ class Voyage extends EntityBase implements EntrepriseOwnedInterface, HasSoftDele
         return $this;
     }
 
-    public function getTrajet(): ?Trajet
+    public function getLigne(): ?Ligne
     {
-        return $this->trajet;
+        return $this->ligne;
     }
 
-    public function setTrajet(?Trajet $trajet): static
+    public function setLigne(?Ligne $ligne): static
     {
-        $this->trajet = $trajet;
+        $this->ligne = $ligne;
 
         return $this;
     }
@@ -459,24 +453,26 @@ class Voyage extends EntityBase implements EntrepriseOwnedInterface, HasSoftDele
         return $this;
     }
 
-    public function getPlacesOccupees(): ?int
+    /* Nombre de billets ACTIFS (VALIDE, deletedAt IS NULL) vendus sur le voyage — remplace l'ancien compteur
+       stocké 'placesoccupees'. Les billets reportés/annulés (désistements) ne comptent pas. Informatif : avec la
+       vente PAR TRONÇON ce total peut dépasser 'placestotal' (un même siège est revendable sur des tronçons
+       disjoints). La dispo réelle par tronçon = 'SiegeStateProvider'.
+     */
+    #[Groups(['read:Voyage'])]
+    public function getTicketsCount(): int
     {
-        return $this->placesoccupees;
-    }
-
-    public function setPlacesOccupees(?int $places_occupees): static
-    {
-        $this->placesoccupees = $places_occupees;
-
-        return $this;
+        return $this->tickets->filter(
+            fn(Ticket $t) => $t->getDeletedAt() === null && $t->getStatut() === TicketStatus::STATUT_VALIDE->value
+        )->count();
     }
 
     public function getSoftDeleteBlockers(): array
     {
         $errors = [];
 
+        // Seuls les billets VALIDE bloquent la suppression ; les billets désistés sont de l'historique
         $ticketsNotDeleted = $this->tickets->filter(
-            fn(Ticket $v) => $v->getDeletedAt() === null
+            fn(Ticket $v) => $v->getDeletedAt() === null && $v->getStatut() === TicketStatus::STATUT_VALIDE->value
         );
 
         if(!$ticketsNotDeleted->isEmpty()) {

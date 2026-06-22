@@ -19,8 +19,9 @@ use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: InventaireRepository::class)]
 #[ApiResource(
-    security: "is_granted('IS_AUTHENTICATED_FULLY')",
-    // normalizationContext: ['groups' => ['read:Inventaire', 'read:Base']], -- Ou.. 'normalizationContext: ['groups' => []]' dans l'opération pour qu'il normalize le 'InventaireOutput' sinon utilisé les groups dans le output
+    security: "is_granted('IS_AUTHENTICATED_FULLY')", /*
+        - normalizationContext: ['groups' => ['read:Inventaire', 'read:Base']], -- Ou.. 'normalizationContext: ['groups' => []]' dans l'opération pour qu'il normalize le 'InventaireOutput' sinon utilisé les groups dans le output
+    */
     paginationItemsPerPage: 30,
     paginationClientItemsPerPage: true,
     order: ['createdAt' => 'DESC'],

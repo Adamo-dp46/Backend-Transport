@@ -9,7 +9,11 @@ use App\Domain\Enum\DepannageStatus;
 use App\Entity\Detailpersonnel;
 use App\Entity\Interface\HasLockGuard;
 use App\Entity\Interface\HasSoftDeleteGuard;
+use App\Entity\Ticket;
 use App\Entity\User;
+use App\Entity\Voyage;
+use App\Security\GareGuard;
+use App\Security\VoyageGuard;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
@@ -19,7 +23,9 @@ class SoftDeleteProcessor implements ProcessorInterface
     public function __construct(
         private ProcessorInterface $processor,
         private RemoveProcessor $removeProcessor,
-        private Security $security
+        private Security $security,
+        private VoyageGuard $voyageGuard,
+        private GareGuard $gareGuard
     )
     {
     }
@@ -30,6 +36,16 @@ class SoftDeleteProcessor implements ProcessorInterface
          * @var User
          */
         $user = $this->security->getUser();
+
+        // Suppression d'un voyage : interdite à la gare de destination (préparation)
+        if($data instanceof Voyage) {
+            $this->voyageGuard->assertPeutGerer($user, $data);
+        }
+
+        // Suppression d'un ticket : réservée à la gare ÉMETTRICE (gare de montée) ; la lecture reste large
+        if($data instanceof Ticket) {
+            $this->gareGuard->assertEstGare($user, $data->getGare(), 'Seule la gare émettrice peut supprimer ce ticket');
+        }
 
         if($data instanceof HasSoftDeleteGuard) { /*
             - On vérifie des blockers si l'entité les supporte
@@ -47,6 +63,10 @@ class SoftDeleteProcessor implements ProcessorInterface
         if($data instanceof Detailpersonnel) {
             if($data->getVoyage()?->getDatefin() !== null) {
                 throw new BadRequestHttpException('Impossible de désaffecter un personnel d\'un voyage clôturé');
+            }
+            // Désaffectation liée à un voyage : interdite à la gare de destination
+            if($data->getVoyage()) {
+                $this->voyageGuard->assertPeutGerer($user, $data->getVoyage());
             }
             if($data->getDepannage()?->getStatut() === DepannageStatus::CLOTURE->value) {
                 throw new BadRequestHttpException('Impossible de désaffecter un personnel d\'un dépannage clôturé');

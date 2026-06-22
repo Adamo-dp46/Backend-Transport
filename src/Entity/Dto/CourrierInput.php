@@ -27,13 +27,12 @@ class CourrierInput
     #[Groups(['write:CourrierInput'])]
     public string $contactdestinataire;
 
-    #[Assert\NotNull]
+    // Nullable : les gares ne sont définies que lorsqu'un voyage est choisi (cf. CourrierProcessor)
     #[Groups(['write:CourrierInput'])]
-    public int $gareDepart;
+    public ?int $gareDepart = null;
 
-    #[Assert\NotNull]
     #[Groups(['write:CourrierInput'])]
-    public int $gareArrivee;
+    public ?int $gareArrivee = null;
 
     #[Groups(['write:CourrierInput'])]
     public ?int $voyage = null;

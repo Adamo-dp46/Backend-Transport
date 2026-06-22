@@ -4,6 +4,7 @@ namespace App\Security\Voter;
 
 use App\Entity\User;
 use App\Repository\PermissionRepository;
+use App\Security\GareScopedEntities;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
@@ -39,10 +40,14 @@ final class PermissionVoter extends Voter
         } /*
             - $user = $this->userRepository->find($user->getId()); - Permet d'avoir les 'userRoles' si on utilise le provider 'jwt' ensuite vérifié si l'utilisateur existe
         */
-        if(in_array('ROLE_ADMIN_GARE', $user->getRoles(), true)) {
-            return true; /*
-                - L'administrateur de gare a un bypass vu qu'il n'a pas besoin de 'userRoles', son périmètre va être restreint au niveau 'GareScopeExtension' et des processors
-            */
+        // L'admin de gare ne bypasse QUE pour les entités bornées par sa gare (Voyage, Ticket, Courrier,
+        // Bagage, User) : leurs données sont déjà restreintes à sa gare par 'GareScopeExtension'.
+        // Pour les entités entreprise-wide (gares, lignes, tarifs, cars, personnel, stock, référentiels,
+        // entreprise…) il n'a AUCUN bypass et retombe sur la vérification de permission ci-dessous
+        // (écriture refusée faute de 'userRoles' ; la lecture des listes reste ouverte via le
+        // 'or is_granted(ROLE_USER)' présent sur les GetCollection pour les selects).
+        if(in_array('ROLE_ADMIN_GARE', $user->getRoles(), true) && $this->isGareScoped($subject)) {
+            return true;
         }
         $entityName = $this->resolveEntityName($subject); /*
             - Plus rapide que 'ReflectionClass'
@@ -102,5 +107,20 @@ final class PermissionVoter extends Voter
             return substr(strrchr(get_class($subject), '\\'), 1);
         }
         return null;
+    }
+
+    /**
+     * Entités sur lesquelles un admin de gare conserve le bypass = ses OPÉRATIONS de gare.
+     * Liste EXPLICITE (source unique : 'GareScopedEntities::ENTITIES') et volontairement découplée des
+     * interfaces de scope de visibilité : une Ligne, par exemple, est filtrée par gare en LECTURE
+     * ('GareScopeExtension') mais reste de la configuration entreprise (un admin de gare ne la
+     * crée/modifie/supprime pas). Le sujet est soit un objet (opérations item), soit le nom court de
+     * l'entité (opérations collection, ex. is_granted('CREER', 'Ticket')).
+     */
+    private function isGareScoped(mixed $subject): bool
+    {
+        $name = $this->resolveEntityName($subject);
+
+        return $name !== null && in_array($name, GareScopedEntities::ENTITIES, true);
     }
 }

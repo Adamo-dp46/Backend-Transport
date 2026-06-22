@@ -14,7 +14,7 @@ use Doctrine\ORM\Events;
 #[AsDoctrineListener(event: Events::postUpdate)] /*
     - Le 'postUpdate' au lieu de 'preUpdate' car avec lui le flush est encore en cours et les 'persist' sur d'autres entités sont ignorés ou causent des comportements imprévisibles or en 'postUpdate' le flush principal est terminé et on peut en déclencher un nouveau proprement
 */
-class VoyageClotureSatutSubscriber
+class VoyageClotureStautSubscriber
 {
     public function postUpdate(PostUpdateEventArgs $args): void
     {
@@ -57,18 +57,22 @@ class VoyageClotureSatutSubscriber
             'voyage' => $entity,
             'deletedAt' => null
         ]);
+        $terminus = $entity->getLigne()?->getGareterminus(); /*
+            - Réception « à l'arrêt » : la clôture (= terminus atteint) n'auto-réceptionne que les colis
+              destinés au terminus. Les colis destinés à un arrêt intermédiaire sont réceptionnés manuellement
+              à leur gare via l'endpoint '/courriers/{id}/receptionner'.
+        */
         foreach($courriers as $courrier) { /*
             - On ne touche pas aux courriers déjà livrés ou annulés ni à ceux forcés manuellement au-delà de 'RECEPTIONNE'
-        */ /*
-            if (in_array($courrier->getStatut(), [
-                CourrierStatus::STATUT_LIVRE->value,
-                CourrierStatus::STATUT_ANNULE->value,
-                CourrierStatus::STATUT_PERDU->value
-            ])) {
+        */
+            if($courrier->getStatut() !== CourrierStatus::STATUT_EN_TRANSIT->value) {
                 continue;
             }
-        */
-            if($courrier->getStatut() === CourrierStatus::STATUT_EN_TRANSIT->value) {
+            $arrivee = $courrier->getGarearrivee();
+            $destineAuTerminus = $terminus === null   // voyage sans ligne (legacy) -> comportement historique
+                || $arrivee === null                  // colis sans gare d'arrivée (legacy)
+                || $arrivee->getId() === $terminus->getId();
+            if($destineAuTerminus) {
                 $courrier->setStatut(CourrierStatus::STATUT_RECEPTIONNE->value);
                 $em->persist($courrier);
                 $hasChanges = true;

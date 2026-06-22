@@ -2,79 +2,37 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\OpenApi\Model\Operation;
+use App\Domain\Enum\DetailcourrierStatus;
 use App\Repository\DetailcourrierRepository;
-use Doctrine\DBAL\Types\Types;
+use App\State\PerduDetailcourrierProcessor;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: DetailcourrierRepository::class)]
-/*
-    -- Si on veut permettre l'ajout ou la modification d'un colis individuellement après création du courrier
-    #[ApiResource(
-        security: "is_granted('IS_AUTHENTICATED_FULLY')",
-        normalizationContext: ['groups' => ['read:Detailcourrier', 'read:Base']],
-        denormalizationContext: ['groups' => ['write:Detailcourrier']],
-        paginationItemsPerPage: 25,
-        paginationClientItemsPerPage: true,
-        operations: [
-            new GetCollection(
-                security: "is_granted('VOIR', 'Detailcourrier')",
-                openapi: new Operation(
-                    summary: 'Liste des détails courrier',
-                    description: 'Permet de voir la liste des détails courrier',
-                    security: [['bearerAuth' => []]]
-                )
-            ),
-            new Get(
-                security: "is_granted('VOIR', object)",
-                requirements: ['id' => '\d+'],
-                openapi: new Operation(
-                    summary: 'Un détail courrier',
-                    description: 'Permet de voir un détail courrier',
-                    security: [['bearerAuth' => []]]
-                )
-            ),
-            new Post(
-                security: "is_granted('CREER', 'Detailcourrier')",
-                processor: DetailcourrierProcessor::class,
-                openapi: new Operation(
-                    summary: 'Ajout d\'un colis au courrier',
-                    description: 'Permet d\'ajouter un colis à un courrier existant',
-                    security: [['bearerAuth' => []]]
-                )
-            ),
-            new Patch(
-                security: "is_granted('MODIFIER', object)",
-                requirements: ['id' => '\d+'],
-                processor: DetailcourrierProcessor::class,
-                denormalizationContext: ['groups' => ['write:Detailcourrier:update']],
-                openapi: new Operation(
-                    summary: 'Modification d\'un colis',
-                    description: 'Permet de modifier un colis',
-                    security: [['bearerAuth' => []]]
-                )
-            ),
-            new Patch(
-                security: "is_granted('SUPPRIMER', object)",
-                uriTemplate: '/detailcourriers/{id}/remove',
-                requirements: ['id' => '\d+'],
-                input: false,
-                processor: SoftDeleteProcessor::class,
-                openapi: new Operation(
-                    summary: 'Suppression d\'un colis',
-                    description: 'Permet de supprimer un colis',
-                    security: [['bearerAuth' => []]]
-                )
+#[ApiResource(
+    security: "is_granted('IS_AUTHENTICATED_FULLY')",
+    normalizationContext: ['groups' => ['read:Detailcourrier', 'read:Base']],
+    denormalizationContext: ['groups' => ['write:Detailcourrier']],
+    operations: [
+        new Patch(
+            security: "is_granted('MODIFIER', 'Courrier')",
+            uriTemplate: '/detailcourriers/{id}/perdu',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: PerduDetailcourrierProcessor::class,
+            openapi: new Operation(
+                summary: 'Déclarer un colis comme perdu',
+                security: [['bearerAuth' => []]]
             )
-        ],
-        openapi: new Operation(
-            security: [['bearerAuth' => []]]
         )
-    )]
-    #[ApiFilter(SearchFilter::class, properties: [
-        'courrier.id' => 'exact'
-    ])]
-*/
+    ],
+    openapi: new Operation(
+        security: [['bearerAuth' => []]]
+    )
+)]
 class Detailcourrier
 {
     #[ORM\Id]
@@ -107,17 +65,21 @@ class Detailcourrier
     #[Groups(['read:Detailcourrier', 'read:Courrier', 'write:Detailcourrier'])]
     private ?int $poids = null;
 
-    #[ORM\Column]
+    #[ORM\Column(type: 'bigint')] // BIGINT : une valeur déclarée peut être élevée (colis de grande valeur)
     #[Groups(['read:Detailcourrier', 'read:Courrier', 'write:Detailcourrier'])]
     private ?int $valeur = null; // La base de calcul de la taxe
 
-    #[ORM\Column]
+    #[ORM\Column(type: 'bigint')] // BIGINT : cohérence avec valeur / total courrier
     #[Groups(['read:Detailcourrier', 'read:Courrier'])]
     private ?int $montant = null; // La taxe de ce colis calculée via 'TarifCourrier'
 
     #[ORM\ManyToOne(inversedBy: 'detailcourriers')]
     #[Groups(['read:Detailcourrier', 'read:Courrier'])]
-    private ?Tarifcourrier $tarifcourrier = null; /*
+    private ?Tarifcourrier $tarifcourrier = null;
+
+    #[ORM\Column(length: 80)]
+    #[Groups(['read:Detailcourrier', 'read:Courrier'])]
+    private ?string $statut = DetailcourrierStatus::STATUT_NORMAL->value; /*
         - On le conserve pour l'historique même si la grille tarifaire change 
     */
 
@@ -230,6 +192,18 @@ class Detailcourrier
     public function setTarifcourrier(?Tarifcourrier $tarifcourrier): static
     {
         $this->tarifcourrier = $tarifcourrier;
+
+        return $this;
+    }
+
+    public function getStatut(): ?string
+    {
+        return $this->statut;
+    }
+
+    public function setStatut(string $statut): static
+    {
+        $this->statut = $statut;
 
         return $this;
     }

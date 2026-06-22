@@ -35,7 +35,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'], // Permet de piloter l'ordre
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Car') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Car') or is_granted('VOIR', 'Voyage') or is_granted('VOIR', 'Depannage')",
             openapi: new Operation(
                 summary: 'La liste des cars',
                 description: 'Permet de voir la liste des cars',

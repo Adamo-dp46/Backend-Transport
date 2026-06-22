@@ -14,6 +14,7 @@ use ApiPlatform\OpenApi\Model\Operation;
 use App\Domain\Enum\BagageStatus;
 use App\Entity\Dto\BagageInput;
 use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Entity\Interface\MultiGareScopedInterface;
 use App\Repository\BagageRepository;
 use App\State\BagageProcessor;
 use App\State\EmbarquerBagageProcessor;
@@ -31,7 +32,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Bagage') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Bagage')",
             openapi: new Operation(
                 summary: 'Liste des bagages',
                 description: 'Permet de voir la liste des bagages',
@@ -125,8 +126,13 @@ use Symfony\Component\Serializer\Attribute\Groups;
     'statut',
     'createdAt'
 ])]
-class Bagage extends EntityBase implements EntrepriseOwnedInterface
+class Bagage extends EntityBase implements EntrepriseOwnedInterface, MultiGareScopedInterface
 {
+    public static function gareScopeFields(): array
+    {
+        return ['garedepart', 'garedescente'];
+    }
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -168,6 +174,14 @@ class Bagage extends EntityBase implements EntrepriseOwnedInterface
     #[ORM\ManyToOne(inversedBy: 'bagages')]
     #[Groups(['read:Bagage'])]
     private ?Voyage $voyage = null;
+
+    #[ORM\ManyToOne]
+    #[Groups(['read:Bagage', 'read:Voyage', 'write:Bagage'])]
+    private ?Gare $garedepart = null; // Gare d'origine du bagage (= gare de l'agent s'il y est rattaché)
+
+    #[ORM\ManyToOne]
+    #[Groups(['read:Bagage', 'read:Voyage', 'write:Bagage'])]
+    private ?Gare $garedescente = null; // Gare de descente du bagage (où le client récupère)
 
     #[ORM\Column(length: 255, nullable: true)]
     #[Groups(['read:Bagage', 'read:Voyage'])]
@@ -325,6 +339,30 @@ class Bagage extends EntityBase implements EntrepriseOwnedInterface
     public function setTarifbagage(?Tarifbagage $tarifbagage): static
     {
         $this->tarifbagage = $tarifbagage;
+
+        return $this;
+    }
+
+    public function getGaredescente(): ?Gare
+    {
+        return $this->garedescente;
+    }
+
+    public function setGaredescente(?Gare $garedescente): static
+    {
+        $this->garedescente = $garedescente;
+
+        return $this;
+    }
+
+    public function getGaredepart(): ?Gare
+    {
+        return $this->garedepart;
+    }
+
+    public function setGaredepart(?Gare $garedepart): static
+    {
+        $this->garedepart = $garedepart;
 
         return $this;
     }

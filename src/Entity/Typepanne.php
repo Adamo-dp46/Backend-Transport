@@ -34,7 +34,7 @@ use Symfony\Component\Validator\Constraints as Assert;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Typepanne') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Typepanne') or is_granted('VOIR', 'Depannage')",
             openapi: new Operation(
                 summary: 'Liste des types de panne',
                 description: 'Permet de voir la liste des types de panne',

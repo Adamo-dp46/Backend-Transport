@@ -17,6 +17,9 @@ class BagageRepository extends ServiceEntityRepository
     }
 
     /* Statistiques
+     * Pilotées par le STATUT métier (et non par 'deletedAt') : la corbeille ne gère que la visibilité
+     * dans les listes, pas l'historique comptable. La recette ne compte que les bagages réellement pris en
+     * charge (EMBARQUE/LIVRE/PERDU) ; un bagage seulement ENREGISTRE n'a pas encore généré de recette.
      */
 
     public function recettesTotales(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): float
@@ -24,7 +27,6 @@ class BagageRepository extends ServiceEntityRepository
         $row = $this->createQueryBuilder('b')
             ->select('COALESCE(SUM(b.montant), 0) AS total')
             ->andWhere('b.identreprise = :ide')
-            ->andWhere('b.deletedAt IS NULL')
             ->andWhere('b.statut IN (:statuts)')
             ->andWhere('b.createdAt >= :debut')
             ->andWhere('b.createdAt <= :fin')
@@ -48,7 +50,6 @@ class BagageRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('b')
             ->select('b.createdBy AS agentid, COALESCE(SUM(b.montant), 0) AS montant, COUNT(b.id) AS nbbagages')
             ->andWhere('b.identreprise = :ide')
-            ->andWhere('b.deletedAt IS NULL')
             ->andWhere('b.statut IN (:statuts)')
             ->andWhere('b.createdAt >= :debut')
             ->andWhere('b.createdAt <= :fin')
@@ -76,7 +77,6 @@ class BagageRepository extends ServiceEntityRepository
                 'COALESCE(SUM(b.poids), 0) AS poids',
             )
             ->andWhere('b.identreprise = :ide')
-            ->andWhere('b.deletedAt IS NULL')
             ->andWhere('b.statut IN (:statuts)')
             ->andWhere('b.createdAt >= :debut')
             ->andWhere('b.createdAt <= :fin')
@@ -103,7 +103,6 @@ class BagageRepository extends ServiceEntityRepository
             ->andWhere('b.identreprise = :ide')
             ->andWhere('b.createdAt >= :debut')
             ->andWhere('b.createdAt <= :fin')
-            ->andWhere('b.deletedAt IS NULL')
             ->setParameter('ide', $identreprise)
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
@@ -129,7 +128,6 @@ class BagageRepository extends ServiceEntityRepository
             ->andWhere('b.identreprise = :ide')
             ->andWhere('b.createdAt >= :debut')
             ->andWhere('b.createdAt <= :fin')
-            ->andWhere('b.deletedAt IS NULL')
             ->setParameter('ide', $identreprise)
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
@@ -137,6 +135,105 @@ class BagageRepository extends ServiceEntityRepository
             ->getSingleResult()
         ;
         return (int)($row['total'] ?? 0);
+    }
+
+    /**
+     * Recette bagage groupée par gare de DÉPART (gare d'émission). Compté à la création.
+     * Les bagages sans gare de départ sont exclus (jointure interne) ; seuls les statuts pris en charge comptent.
+     */
+    public function recetteParGare(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('b')
+            ->select('g.id AS gareid, g.libelle AS garelibelle, COUNT(b.id) AS nbbagages, COALESCE(SUM(b.montant), 0) AS recette')
+            ->join('b.garedepart', 'g')
+            ->andWhere('b.identreprise = :ide')
+            ->andWhere('b.statut IN (:statuts)')
+            ->andWhere('b.createdAt >= :debut')
+            ->andWhere('b.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('statuts', ['EMBARQUE', 'LIVRE', 'PERDU'])
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Recette bagages par gare (dépôt) ET par jour — séries temporelles / sparklines. */
+    public function recetteParGareEtJour(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('b')
+            ->select('g.id AS gareid, DATE(b.createdAt) AS jour, COALESCE(SUM(b.montant), 0) AS recette')
+            ->join('b.garedepart', 'g')
+            ->andWhere('b.identreprise = :ide')
+            ->andWhere('b.statut IN (:statuts)')
+            ->andWhere('b.createdAt >= :debut')
+            ->andWhere('b.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('statuts', ['EMBARQUE', 'LIVRE', 'PERDU'])
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->addGroupBy('jour')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Recette bagages par gare (dépôt) ET par agent (createdBy) — croisement caisse. */
+    public function recetteParGareEtAgent(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('b')
+            ->select('g.id AS gareid, b.createdBy AS agentid, COUNT(b.id) AS nb, COALESCE(SUM(b.montant), 0) AS recette')
+            ->join('b.garedepart', 'g')
+            ->andWhere('b.identreprise = :ide')
+            ->andWhere('b.statut IN (:statuts)')
+            ->andWhere('b.createdAt >= :debut')
+            ->andWhere('b.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('statuts', ['EMBARQUE', 'LIVRE', 'PERDU'])
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->addGroupBy('b.createdBy')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Bagages émis par gare (garedepart) : nombre + poids total expédié. */
+    public function emisParGare(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('b')
+            ->select('g.id AS gareid, g.libelle AS garelibelle, COUNT(b.id) AS nb, COALESCE(SUM(b.poids), 0) AS poids')
+            ->join('b.garedepart', 'g')
+            ->andWhere('b.identreprise = :ide')
+            ->andWhere('b.statut IN (:statuts)')
+            ->andWhere('b.createdAt >= :debut')
+            ->andWhere('b.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('statuts', ['EMBARQUE', 'LIVRE', 'PERDU'])
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Bagages livrés par gare (garedescente, statut LIVRE). */
+    public function livresParGare(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('b')
+            ->select('g.id AS gareid, g.libelle AS garelibelle, COUNT(b.id) AS nb')
+            ->join('b.garedescente', 'g')
+            ->andWhere('b.identreprise = :ide')
+            ->andWhere("b.statut = 'LIVRE'")
+            ->andWhere('b.createdAt >= :debut')
+            ->andWhere('b.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->getQuery()
+            ->getArrayResult();
     }
 
     /* Bordereau chauffeur

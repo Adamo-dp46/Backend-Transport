@@ -9,6 +9,7 @@ use ApiPlatform\State\ProcessorInterface;
 use App\Domain\Enum\BagageStatus;
 use App\Entity\Bagage;
 use App\Entity\Dto\BagageInput;
+use App\Entity\Gare;
 use App\Entity\User;
 use App\Entity\Voyage;
 use App\Repository\BagageRepository;
@@ -83,11 +84,15 @@ class BagageProcessor implements ProcessorInterface
             $identreprise
         );
 
+        [$garedepart, $garedescente] = $this->resoudreGares($data, $voyage);
+
         $bagage = new Bagage();
         $bagage
             ->setIdentreprise($identreprise)
             ->setCreatedBy($userId)
             ->setVoyage($voyage)
+            ->setGaredepart($garedepart)
+            ->setGaredescente($garedescente)
             ->setNomclient($data->nomclient)
             ->setContactclient($data->contactclient)
             ->setNature($data->nature)
@@ -157,6 +162,8 @@ class BagageProcessor implements ProcessorInterface
             $identreprise
         );
 
+        [$garedepart, $garedescente] = $this->resoudreGares($data, $voyage);
+
         $bagage
             ->setUpdatedBy($userId)
             ->setNomclient($data->nomclient)
@@ -168,11 +175,77 @@ class BagageProcessor implements ProcessorInterface
             ->setMontantforce($montantforce)
             ->setTarifbagage($tarifbagage)
             ->setVoyage($voyage)
+            ->setGaredepart($garedepart)
+            ->setGaredescente($garedescente)
             ->setStatut($this->resoudreStatut($voyage))
             ->setUpdatedAt(new \DateTimeImmutable())
         ;
 
         return $this->processor->process($bagage, $operation, $uriVariables, $context);
+    }
+
+    /**
+     * Résout les gares d'origine et de descente du bagage.
+     * - Sans voyage : aucune gare.
+     * - Avec voyage : les deux gares sont des arrêts de la ligne, la descente après l'origine.
+     *   L'origine est FORCÉE à la gare de l'agent s'il y est rattaché (sécurité : pas d'usurpation
+     *   de provenance) ; sinon elle vaut la gare d'origine de la ligne par défaut.
+     *
+     * @return array{0: ?Gare, 1: ?Gare}
+     */
+    private function resoudreGares(BagageInput $data, ?Voyage $voyage): array
+    {
+        if ($voyage === null) {
+            return [null, null];
+        }
+
+        $ligne = $voyage->getLigne();
+        if (!$ligne) {
+            throw new BadRequestHttpException('Le voyage sélectionné n\'est rattaché à aucune ligne');
+        }
+
+        $ordreParGare = [];
+        $gareParId = [];
+        foreach ($ligne->getArrets() as $arret) {
+            $g = $arret->getGare();
+            $ordreParGare[$g->getId()] = $arret->getOrdre();
+            $gareParId[$g->getId()] = $g;
+        }
+
+        // Gare d'origine
+        $userGare = $this->security->getUser()->getGare();
+        if ($userGare !== null) {
+            if (!isset($gareParId[$userGare->getId()])) {
+                throw new BadRequestHttpException('Votre gare (' . $userGare->getLibelle() . ') n\'est pas desservie par ce voyage');
+            }
+            $garedepart = $gareParId[$userGare->getId()];
+        } elseif ($data->garedepart !== null) {
+            if (!isset($gareParId[$data->garedepart])) {
+                throw new BadRequestHttpException('La gare de départ doit être un arrêt de la ligne du voyage');
+            }
+            $garedepart = $gareParId[$data->garedepart];
+        } else {
+            $garedepart = $ligne->getGareorigine();
+        }
+
+        // Gare de descente (par défaut : terminus)
+        if ($data->garedescente !== null) {
+            if (!isset($gareParId[$data->garedescente])) {
+                throw new BadRequestHttpException('La gare de descente doit être un arrêt de la ligne du voyage');
+            }
+            $garedescente = $gareParId[$data->garedescente];
+        } else {
+            $garedescente = $ligne->getGareterminus();
+        }
+
+        // Sens du trajet : la descente doit être après l'origine
+        $ordreDepart = $ordreParGare[$garedepart->getId()] ?? -1;
+        $ordreDescente = $ordreParGare[$garedescente->getId()] ?? PHP_INT_MAX;
+        if ($ordreDescente <= $ordreDepart) {
+            throw new BadRequestHttpException('La gare de descente doit être située après la gare de départ');
+        }
+
+        return [$garedepart, $garedescente];
     }
 
     private function resoudreStatut(?Voyage $voyage): string

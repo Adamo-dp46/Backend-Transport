@@ -7,6 +7,7 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\State\ProcessorInterface;
 use App\Domain\Enum\CourrierStatus;
+use App\Domain\Enum\DetailcourrierStatus;
 use App\Entity\Courrier;
 use App\Entity\Detailcourrier;
 use App\Entity\Dto\CourrierInput;
@@ -56,28 +57,7 @@ class CourrierProcessor implements ProcessorInterface
 
     private function handlePost(CourrierInput $data, int $userId, int $identreprise, $operation, $uriVariables, $context): Courrier
     {
-        $gareDepart = $this->gareRepository->findOneBy([
-            'id' => $data->gareDepart,
-            'identreprise' => $identreprise,
-            'deletedAt' => null
-        ]);
-        if(!$gareDepart) {
-            throw new NotFoundHttpException('Gare de départ invalide');
-        }
-
-        $gareArrivee = $this->gareRepository->findOneBy([
-            'id' => $data->gareArrivee,
-            'identreprise' => $identreprise,
-            'deletedAt' => null
-        ]);
-        if(!$gareArrivee) {
-            throw new NotFoundHttpException('Gare d\'arrivée invalide');
-        }
-
-        if($data->gareDepart === $data->gareArrivee) {
-            throw new BadRequestHttpException('La gare de départ et la gare d\'arrivée doivent être différentes');
-        }
-
+        // Voyage (optionnel)
         $voyage = null;
         if($data->voyage !== null) {
             $voyage = $this->voyageRepository->findOneBy([
@@ -88,8 +68,10 @@ class CourrierProcessor implements ProcessorInterface
             if(!$voyage) {
                 throw new NotFoundHttpException('Voyage invalide');
             }
-            // -- On pourrait faire la synchronisation statut auto..
         }
+
+        // Les gares ne sont définies que si un voyage est choisi (et doivent être des arrêts de sa ligne)
+        [$gareDepart, $gareArrivee] = $this->resoudreGares($data, $voyage, $identreprise);
 
         $courrier = new Courrier();
         $courrier
@@ -130,25 +112,8 @@ class CourrierProcessor implements ProcessorInterface
         if(!$courrier) {
             throw new NotFoundHttpException('Courrier invalide');
         }
-        $gareDepart = $this->gareRepository->findOneBy([
-            'id' => $data->gareDepart,
-            'identreprise' => $identreprise,
-            'deletedAt' => null
-        ]);
-        if(!$gareDepart) {
-            throw new NotFoundHttpException('Gare de départ invalide');
-        }
-        $gareArrivee = $this->gareRepository->findOneBy([
-            'id' => $data->gareArrivee,
-            'identreprise' => $identreprise,
-            'deletedAt' => null
-        ]);
-        if(!$gareArrivee) {
-            throw new NotFoundHttpException('Gare d\'arrivée invalide');
-        }
-        if($data->gareDepart === $data->gareArrivee) {
-            throw new BadRequestHttpException('Les gares de départ et d\'arrivée doivent être différentes');
-        }
+
+        // Voyage (optionnel)
         $voyage = null;
         if($data->voyage !== null) {
             $voyage = $this->voyageRepository->findOneBy([
@@ -158,6 +123,9 @@ class CourrierProcessor implements ProcessorInterface
             ]);
             if (!$voyage) throw new NotFoundHttpException('Voyage invalide');
         }
+
+        // Les gares ne sont définies que si un voyage est choisi (et doivent être des arrêts de sa ligne)
+        [$gareDepart, $gareArrivee] = $this->resoudreGares($data, $voyage, $identreprise);
 
         if($data->modepaiement !== $courrier->getModepaiement() &&
             in_array($courrier->getStatut(), [
@@ -191,19 +159,154 @@ class CourrierProcessor implements ProcessorInterface
         ;
 
         if (!empty($data->details)) {
-            // ✅ 1. Valider tous les détails AVANT de toucher à la base
-            $this->validerDetails($data->details, $identreprise);
-
-            // ✅ 2. Seulement si tout est valide, on supprime et recrée
-            foreach ($courrier->getDetailcourriers() as $detail) {
-                $this->em->remove($detail);
-            }
-            $this->em->flush();
-
-            $this->handleDetails($courrier, $data->details, $identreprise, $userId);
+            $this->reconcileDetails($courrier, $data->details, $identreprise, $userId); /*
+                - Réconciliation par id : on conserve les colis existants (id + statut, ex. PERDU)
+            */
         }
 
         return $this->processor->process($courrier, $operation, $uriVariables, $context);
+    }
+
+    /**
+     * Réconcilie les colis d'un courrier lors d'une modification, PAR ID, plutôt que de
+     * tout supprimer pour recréer :
+     *  - colis existant (id reçu)  → mis à jour EN PLACE (son id ET son statut, ex. PERDU, sont conservés)
+     *  - colis nouveau (sans id)   → créé
+     *  - colis retiré (id absent)  → supprimé, SAUF s'il est déclaré perdu (on préserve la trace)
+     * La taxe de chaque colis est recalculée depuis la grille (valeur → TarifCourrier).
+     */
+    private function reconcileDetails(Courrier $courrier, array $details, int $identreprise, int $userId): void
+    {
+        // Validation préalable : aucune mutation tant que tous les colis n'ont pas un tarif valide
+        $this->validerDetails($details, $identreprise);
+
+        /** @var array<int, Detailcourrier> $existants */
+        $existants = [];
+        foreach ($courrier->getDetailcourriers() as $detail) {
+            $existants[$detail->getId()] = $detail;
+        }
+
+        $idsConserves = [];
+        $montantTotal = 0;
+
+        foreach ($details as $detailInput) {
+            $valeur = (int) $detailInput['valeur'];
+            $tarif = $this->tarifcourrierRepository->findTarifForValeur($valeur, $identreprise); // garanti non-null (validerDetails)
+
+            $id = isset($detailInput['id']) ? (int) $detailInput['id'] : null;
+
+            if ($id !== null && isset($existants[$id])) {
+                $detail = $existants[$id]; // mise à jour EN PLACE : id + statut conservés
+                $idsConserves[$id] = true;
+            } else {
+                $detail = new Detailcourrier();
+                $detail->setCourrier($courrier);
+                $this->em->persist($detail);
+            }
+
+            $detail
+                ->setNature($detailInput['nature'])
+                ->setDesignation($detailInput['designation'] ?? null)
+                ->setEmballage($detailInput['emballage'] ?? null)
+                ->setType($detailInput['type'])
+                ->setPoids(isset($detailInput['poids']) ? (int) $detailInput['poids'] : null)
+                ->setValeur($valeur)
+                ->setMontant($tarif->getMontanttaxe())
+                ->setTarifcourrier($tarif);
+
+            $montantTotal += (int) $tarif->getMontanttaxe();
+        }
+
+        foreach ($existants as $id => $detail) { /*
+            - Colis présents avant mais absents maintenant
+        */
+            if (!isset($idsConserves[$id])) {
+                if ($detail->getStatut() === DetailcourrierStatus::STATUT_PERDU->value) {
+                    throw new BadRequestHttpException(sprintf(
+                        'Impossible de retirer le colis "%s" : il est déclaré perdu.',
+                        $detail->getDesignation() ?: $detail->getNature()
+                    ));
+                }
+                $this->em->remove($detail);
+            }
+        }
+
+        $courrier->setMontant((int) $montantTotal);
+    }
+
+    /**
+     * Résout les gares de départ/arrivée d'un courrier.
+     * - Sans voyage : aucune gare (le colis est simplement enregistré, EN_ATTENTE d'affectation).
+     * - Avec voyage : les deux gares sont obligatoires, valides, distinctes et sur la ligne du voyage.
+     *
+     * @return array{0: ?Gare, 1: ?Gare}
+     */
+    private function resoudreGares(CourrierInput $data, ?Voyage $voyage, int $identreprise): array
+    {
+        if ($voyage === null) {
+            return [null, null];
+        }
+
+        if ($data->gareDepart === null || $data->gareArrivee === null) {
+            throw new BadRequestHttpException('Sélectionnez la gare de départ et la gare d\'arrivée');
+        }
+        if ($data->gareDepart === $data->gareArrivee) {
+            throw new BadRequestHttpException('La gare de départ et la gare d\'arrivée doivent être différentes');
+        }
+
+        $gareDepart = $this->gareRepository->findOneBy([
+            'id' => $data->gareDepart,
+            'identreprise' => $identreprise,
+            'deletedAt' => null
+        ]);
+        if (!$gareDepart) {
+            throw new NotFoundHttpException('Gare de départ invalide');
+        }
+
+        $gareArrivee = $this->gareRepository->findOneBy([
+            'id' => $data->gareArrivee,
+            'identreprise' => $identreprise,
+            'deletedAt' => null
+        ]);
+        if (!$gareArrivee) {
+            throw new NotFoundHttpException('Gare d\'arrivée invalide');
+        }
+
+        // Sécurité : un agent rattaché à une gare ne peut créer un courrier qu'au départ de SA gare
+        $userGare = $this->security->getUser()->getGare();
+        if ($userGare !== null && $gareDepart->getId() !== $userGare->getId()) {
+            throw new BadRequestHttpException('Vous ne pouvez créer que des courriers au départ de votre gare (' . $userGare->getLibelle() . ')');
+        }
+
+        $this->assertGaresSurLigne($voyage, $data->gareDepart, $data->gareArrivee);
+
+        return [$gareDepart, $gareArrivee];
+    }
+
+    /**
+     * Cohérence avec la billetterie : un colis qui voyage sur un voyage donné ne peut
+     * partir/arriver que dans des gares desservies par la ligne de ce voyage, et dans
+     * le sens du trajet (arrivée après départ). Ne s'applique que si un voyage est fourni.
+     */
+    private function assertGaresSurLigne(Voyage $voyage, int $gareDepartId, int $gareArriveeId): void
+    {
+        $ligne = $voyage->getLigne();
+        if (!$ligne) {
+            throw new BadRequestHttpException('Le voyage sélectionné n\'est rattaché à aucune ligne');
+        }
+
+        $ordreParGare = [];
+        foreach ($ligne->getArrets() as $arret) {
+            $ordreParGare[$arret->getGare()->getId()] = $arret->getOrdre();
+        }
+
+        if (!isset($ordreParGare[$gareDepartId], $ordreParGare[$gareArriveeId])) {
+            throw new BadRequestHttpException('La gare de départ et la gare d\'arrivée doivent être des arrêts de la ligne du voyage sélectionné');
+        }
+
+        if ($ordreParGare[$gareDepartId] >= $ordreParGare[$gareArriveeId]) {
+            throw new BadRequestHttpException('La gare d\'arrivée doit être située après la gare de départ sur la ligne du voyage');
+        }
     }
 
     private function handleDetails(Courrier $courrier, array $details, int $identreprise, int $userId): void

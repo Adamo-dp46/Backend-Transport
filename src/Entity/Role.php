@@ -9,10 +9,10 @@ use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\OpenApi\Model\Operation;
 use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Entity\Interface\GareOwnedInterface;
 use App\Repository\RoleRepository;
 use App\State\RoleProcessor;
 use App\State\SoftDeleteProcessor;
-use App\Validator\UniquePerEntreprise;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
@@ -20,10 +20,11 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints\Valid;
 
 #[ORM\Entity(repositoryClass: RoleRepository::class)]
-#[UniquePerEntreprise(
-    fields: ['name'],
-    message: 'L\'enregistrement existe déjà pour votre entreprise'
-)]
+/*
+    - Unicité du nom gérée par 'RoleProcessor' au périmètre (entreprise, gare) : un rôle de gare et un
+      rôle entreprise (gare = null) peuvent porter le même nom, et deux gares peuvent réutiliser un nom.
+      ('UniquePerEntreprise' ne convient pas ici car il ignore la vérif dès qu'un champ scope est null.)
+*/
 #[ApiResource(
     security: "is_granted('IS_AUTHENTICATED_FULLY')",
     normalizationContext: ['groups' => ['read:Role', 'read:Base'], 'skip_null_values' => false],
@@ -31,7 +32,7 @@ use Symfony\Component\Validator\Constraints\Valid;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Role') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Role') or is_granted('VOIR', 'User')",
             openapi: new Operation(
                 summary: 'La liste des rôles',
                 description: 'Permet de voir la liste des rôles',
@@ -87,7 +88,7 @@ use Symfony\Component\Validator\Constraints\Valid;
         security: [['bearerAuth' => []]]
     )
 )]
-class Role extends EntityBase implements EntrepriseOwnedInterface
+class Role extends EntityBase implements EntrepriseOwnedInterface, GareOwnedInterface
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -105,6 +106,14 @@ class Role extends EntityBase implements EntrepriseOwnedInterface
 
     #[ORM\Column(nullable: true)]
     private ?int $identreprise = null;
+
+    /**
+     * Gare « propriétaire » du rôle : null = rôle entreprise (créé par l'admin entreprise, visible
+     * partout) ; sinon rôle de cette gare, visible/éditable uniquement par ses acteurs via
+     * 'GareScopeExtension'. Non exposé en écriture : auto-affecté par 'RoleProcessor'.
+     */
+    #[ORM\ManyToOne]
+    private ?Gare $gare = null;
 
     #[ORM\Column(length: 255, nullable: true)]
     #[Groups(['read:Role', 'write:Role'])]
@@ -169,6 +178,23 @@ class Role extends EntityBase implements EntrepriseOwnedInterface
     public function setIdentreprise(?int $identreprise): static
     {
         $this->identreprise = $identreprise;
+
+        return $this;
+    }
+
+    public static function gareScopeField(): string
+    {
+        return 'gare';
+    }
+
+    public function getGare(): ?Gare
+    {
+        return $this->gare;
+    }
+
+    public function setGare(?Gare $gare): static
+    {
+        $this->gare = $gare;
 
         return $this;
     }

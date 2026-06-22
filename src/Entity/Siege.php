@@ -17,7 +17,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: SiegeRepository::class)]
 #[ApiResource(
-    // security: "is_granted('IS_AUTHENTICATED_FULLY')",
+    security: "is_granted('IS_AUTHENTICATED_FULLY')",
     normalizationContext: ['groups' => ['read:Siege']],
     // provider: SiegeStateProvider::class,
     operations: [

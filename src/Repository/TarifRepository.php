@@ -16,28 +16,17 @@ class TarifRepository extends ServiceEntityRepository
         parent::__construct($registry, Tarif::class);
     }
 
-    //    /**
-    //     * @return Tarif[] Returns an array of Tarif objects
-    //     */
-    //    public function findByExampleField($value): array
-    //    {
-    //        return $this->createQueryBuilder('t')
-    //            ->andWhere('t.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->orderBy('t.id', 'ASC')
-    //            ->setMaxResults(10)
-    //            ->getQuery()
-    //            ->getResult()
-    //        ;
-    //    }
-
-    //    public function findOneBySomeField($value): ?Tarif
-    //    {
-    //        return $this->createQueryBuilder('t')
-    //            ->andWhere('t.exampleField = :val')
-    //            ->setParameter('val', $value)
-    //            ->getQuery()
-    //            ->getOneOrNullResult()
-    //        ;
-    //    }
+    /**
+     * Prix d'un segment (garedepart → garearrivee) dans la grille GLOBALE de l'entreprise.
+     * Indépendant de la ligne : le même couple de gares a un seul prix.
+     */
+    public function findMontant(int $gareDepartId, int $gareArriveeId, int $entrepriseId): ?Tarif
+    {
+        return $this->findOneBy([
+            'garedepart' => $gareDepartId,
+            'garearrivee' => $gareArriveeId,
+            'identreprise' => $entrepriseId,
+            'deletedAt' => null,
+        ]);
+    }
 }

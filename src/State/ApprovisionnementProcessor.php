@@ -115,19 +115,123 @@ class ApprovisionnementProcessor implements ProcessorInterface
             throw new NotFoundHttpException('Approvisionnement invalide');
         }
 
+        /* -- Verrouiller désactivé (remplacé par l'annulation) — réactivable :
         if($approvisionnement->isVerrouille()) {
             throw new BadRequestHttpException('Cet approvisionnement est verrouillé et ne peut plus être modifié');
         }
-
-        /**
-         * @var Detailapprovisionnement
-         */
-        $detailapprovisionnements = $approvisionnement->getDetailapprovisionnements();
+        */
 
         if(!empty($data->details)) {
-            foreach($detailapprovisionnements as $detail) { /*
-                - On annule les mouvements de stock existants
+            $this->reconcileDetails($approvisionnement, $data->details, $entrepriseId, $userId); /*
+                - Réconciliation par différence : on ne touche au stock que pour ce qui change réellement
             */
+        }
+        $approvisionnement->setUpdatedBy($userId);
+
+        return $this->processor->process($approvisionnement, $operation, $uriVariables, $context);
+    }
+
+    /**
+     * Réconcilie les détails lors d'une modification : on compare les détails
+     * existants avec ceux reçus (clé = la pièce) et on ne génère QUE les
+     * mouvements de stock réellement nécessaires :
+     *  - pièce retirée      → SORTIE de sa quantité (on annule son entrée)
+     *  - pièce ajoutée      → ENTREE de sa quantité
+     *  - quantité augmentée → ENTREE du surplus uniquement
+     *  - quantité diminuée  → SORTIE de la différence
+     *  - pièce inchangée    → AUCUN mouvement
+     * Les lignes conservées sont mises à jour en place (pas de suppression/recréation),
+     * ce qui garde leur id et un inventaire propre.
+     */
+    private function reconcileDetails($approvisionnement, $details, $entrepriseId, $userId)
+    {
+        /** @var array<int, Detailapprovisionnement> $existants */
+        $existants = [];
+        foreach($approvisionnement->getDetailapprovisionnements() as $detail) {
+            $existants[$detail->getPiece()->getId()] = $detail;
+        }
+
+        $piecesRecues = [];
+
+        foreach($details as $detailInput) {
+            $pieceId = (int)$detailInput['piece'];
+            $piecesRecues[$pieceId] = true;
+
+            $quantite = (int)$detailInput['quantite'];
+            $prixUnitaire = (int)$detailInput['prixunitaire'];
+            if($quantite <= 0) {
+                throw new BadRequestHttpException('Quantité invalide');
+            }
+            if($prixUnitaire <= 0) {
+                throw new BadRequestHttpException('Prix unitaire invalide');
+            }
+
+            if(isset($existants[$pieceId])) { /*
+                - Pièce déjà présente : on n'ajuste que le delta de quantité
+            */
+                $detail = $existants[$pieceId];
+                $delta = $quantite - $detail->getQuantite();
+                if($delta > 0) {
+                    $this->stockmouvementService->createMovement(
+                        $detail->getPiece(),
+                        Typemouvement::ENTREE->value,
+                        $delta,
+                        Referencetype::APPROVISIONNEMENT->value,
+                        $approvisionnement->getId(),
+                        $entrepriseId,
+                        $userId
+                    );
+                } elseif($delta < 0) {
+                    $this->stockmouvementService->createMovement(
+                        $detail->getPiece(),
+                        Typemouvement::SORTIE->value,
+                        -$delta,
+                        Referencetype::APPROVISIONNEMENT->value,
+                        $approvisionnement->getId(),
+                        $entrepriseId,
+                        $userId
+                    );
+                }
+                $detail
+                    ->setQuantite($quantite)
+                    ->setPrixunitaire($prixUnitaire)
+                    ->setCouttotal($quantite * $prixUnitaire);
+            } else { /*
+                - Nouvelle pièce : entrée complète
+            */
+                $piece = $this->pieceRepository->findOneBy([
+                    'id' => $pieceId,
+                    'identreprise' => $entrepriseId,
+                    'deletedAt' => null
+                ]);
+                if(!$piece) {
+                    throw new NotFoundHttpException('Référence invalide');
+                }
+                $detail = new Detailapprovisionnement();
+                $detail
+                    ->setApprovisionnement($approvisionnement)
+                    ->setPiece($piece)
+                    ->setQuantite($quantite)
+                    ->setPrixunitaire($prixUnitaire)
+                    ->setCouttotal($quantite * $prixUnitaire);
+                $this->em->persist($detail);
+
+                $this->stockmouvementService->createMovement(
+                    $piece,
+                    Typemouvement::ENTREE->value,
+                    $quantite,
+                    Referencetype::APPROVISIONNEMENT->value,
+                    $approvisionnement->getId(),
+                    $entrepriseId,
+                    $userId
+                );
+            }
+        }
+
+        foreach($existants as $pieceId => $detail) { /*
+            - Pièces présentes avant mais absentes maintenant : on annule leur entrée
+        */
+            if(!isset($piecesRecues[$pieceId])) {
                 $this->stockmouvementService->createMovement(
                     $detail->getPiece(),
                     Typemouvement::SORTIE->value,
@@ -140,13 +244,6 @@ class ApprovisionnementProcessor implements ProcessorInterface
                 $this->em->remove($detail);
             }
         }
-
-        $this->handleDetails($approvisionnement, $data->details, $entrepriseId, $userId); /*
-            - On recrée les nouveaux détails
-        */
-        $approvisionnement->setUpdatedBy($userId);
-
-        return $this->processor->process($approvisionnement, $operation, $uriVariables, $context);
     }
 
     private function handleDetails($approvisionnement, $details, $entrepriseId, $userId)

@@ -85,7 +85,7 @@ class BordereauProvider implements ProviderInterface
                 destination: $voyage->getDestination(),
                 datedebut: $voyage->getDatedebut()?->format('d/m/Y H:i') ?? '',
                 placestotal: $voyage->getPlacestotal(),
-                placesoccupees: $voyage->getPlacesoccupees()
+                placesoccupees: $voyage->getTicketsCount() // billets actifs comptés à la volée (ex-colonne 'placesoccupees')
             ),
             gare: new BordereauGareDto(
                 id: $gare->getId(),
@@ -94,7 +94,7 @@ class BordereauProvider implements ProviderInterface
             ),
             nbtickets: $stats['nbtickets'],
             recette: $stats['recette'],
-            placesrestantes: $voyage->getPlacestotal() - $voyage->getPlacesoccupees(),
+            placesrestantes: $voyage->getPlacestotal() - $voyage->getTicketsCount(),
             generele: (new \DateTime())->format('d/m/Y à H:i'),
             passagers: $passagers
         );

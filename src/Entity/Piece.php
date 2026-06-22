@@ -40,7 +40,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Piece') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Piece')",
             openapi: new Operation(
                 summary: 'La liste des pièces',
                 description: 'Permet de voir la liste des pièces',

@@ -46,7 +46,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
             )
         ),
         new Get(
-            security: "is_granted('VOIR', object)",
+            security: "is_granted('VOIR', object) or is_granted('ROLE_USER')",
             requirements: ['id' => '\d+'],
             openapi: new Operation(
                 summary: 'Le personnel',
@@ -158,7 +158,7 @@ class Personnel extends EntityBase implements EntrepriseOwnedInterface // HasSof
     private ?string $statut = ReferenceStatus::ACTIF->value;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['read:Depannage', 'write:Personnel'])]
+    #[Groups(['read:Depannage', 'read:Personnel', 'write:Personnel'])]
     private ?\DateTimeImmutable $dateembauche = null;
 
     public function __construct()

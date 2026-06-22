@@ -93,7 +93,7 @@ class BordereauChauffeurProvider implements ProviderInterface
                 datedebut: $voyage->getDatedebut()?->format('d/m/Y H:i') ?? '',
                 matricule: $voyage->getCar()?->getMatricule(),
                 placestotal: $voyage->getPlacestotal(),
-                placesoccupees: $voyage->getPlacesoccupees()
+                placesoccupees: $voyage->getTicketsCount() // billets actifs comptés à la volée (ex-colonne 'placesoccupees')
             ),
             generele: (new \DateTime())->format('d/m/Y à H:i'),
             totalTickets: count($tickets),

@@ -6,14 +6,15 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProcessorInterface;
 use App\Domain\Enum\ReferenceStatus;
 use App\Entity\User;
+use App\Security\UserManagementGuard;
 use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 class SuspendreUserProcessor implements ProcessorInterface
 {
     public function __construct(
         private ProcessorInterface $processor,
-        private Security $security
+        private Security $security,
+        private UserManagementGuard $guard
     )
     {
     }
@@ -26,36 +27,10 @@ class SuspendreUserProcessor implements ProcessorInterface
          * @var User
          */
         $currentUser = $this->security->getUser(); /*
-            - On n'a pas besoin de vérifier le 'identreprise' vu qu'il est géré par le filtre
+            - L'identreprise est déjà géré par le filtre ; toutes les règles de hiérarchie/gare
+              (auto-suspension, fondateur, admin, admin de gare, périmètre gare) sont centralisées.
         */
-        if(in_array('ROLE_ADMIN', $data->getRoles(), true) && !in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true)) { 
-            throw new BadRequestHttpException('L\'administrateur ne peut pas être suspendu'); /*
-                - On empêche la suspension de l'administrateur
-            */
-        }
-
-        if($data->isFounder() && !in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true)) {
-            throw new BadRequestHttpException('Le fondateur de l\'entreprise ne peut pas être suspendu');
-        }
-
-        if($data->getId() === $currentUser->getId()) {
-            throw new BadRequestHttpException('Vous ne pouvez pas suspendre votre propre compte'); /*
-                - On empêche l'auto-suspension
-            */
-        }
-
-        if(in_array('ROLE_ADMIN_GARE', $data->getRoles(), true) && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true) && !in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true)
-        ) {
-            throw new BadRequestHttpException('Seul un administrateur peut suspendre un autre administrateur de gare');
-        }
-
-        if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true) && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true)) { /*
-            - Le ' && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true)' permet d'empêcher qu'un administrateur vois les options d'un administrateur de gare vu qu'il bypass
-        */
-            if($data->getGare()?->getId() !== $currentUser->getGare()?->getId()) {
-                throw new BadRequestHttpException('Vous ne pouvez suspendre que les utilisateurs de votre gare');
-            }
-        }
+        $this->guard->assertCanManage($currentUser, $data);
 
         $data->setStatut(
             $data->getStatut() === ReferenceStatus::ACTIF->value

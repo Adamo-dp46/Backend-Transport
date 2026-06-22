@@ -7,6 +7,7 @@ use ApiPlatform\State\ProcessorInterface;
 use App\Domain\Enum\CourrierStatus;
 use App\Entity\Courrier;
 use App\Entity\User;
+use App\Security\GareGuard;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
@@ -14,7 +15,8 @@ class LivrerCourrierProcessor implements ProcessorInterface
 {
     public function __construct(
         private ProcessorInterface $processor,
-        private Security $security
+        private Security $security,
+        private GareGuard $gareGuard
     )
     {
     }
@@ -31,8 +33,12 @@ class LivrerCourrierProcessor implements ProcessorInterface
         if($data->getStatut() !== CourrierStatus::STATUT_RECEPTIONNE->value) {
             throw new BadRequestHttpException('Seul un courrier réceptionné peut être marqué comme livré. Statut actuel : ' . $data->getStatut());
         }
+
+        // Seule la gare de DESTINATION (où le colis est réceptionné) confirme la remise au destinataire.
+        $this->gareGuard->assertEstGare($user, $data->getGarearrivee(), 'Seule la gare de destination peut confirmer la livraison de ce courrier');
         $data
             ->setStatut(CourrierStatus::STATUT_LIVRE->value)
+            ->setDatelivraison(new \DateTimeImmutable())
             ->setUpdatedBy($user->getId())
             ->setUpdatedAt(new \DateTimeImmutable());
         /*

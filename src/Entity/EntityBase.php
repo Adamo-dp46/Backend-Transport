@@ -10,7 +10,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     - Pour que 'Doctrine' l'intègre correctement dans le cycle de vie des entités enfants sinon les attributs 'PrePersist' et 'PreUpdate' peuvent ne pas être prises en compte correctement
 */
 #[ORM\HasLifecycleCallbacks]
-abstract class EntityBase
+abstract class EntityBase // Ou.. 'PrePersist' et 'PreUpdate' via un subscriber
 {
     #[ORM\Column(name: "created_at", type: "datetime_immutable", nullable: true)]
     #[Groups(['read:Base'])]

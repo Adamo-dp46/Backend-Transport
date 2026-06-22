@@ -24,129 +24,71 @@
 - 
 
 - 
-- On.. un bypass à `ROLE_ADMIN_GARE` pour éviter de lui donner des rôles manuellement et on.. son périmètre via les extensions et processors
+SycaPay, Jèko, GeniusPay, AdjeminPay
 
+- Amélioration, nouvelle fonctionnalité 
+    - client next(implémenté un module) en utilisant les meilleurs pratiques
+    - Géolocalisation pour le suivi des cars en temps réel
+    - Notifications : SMS(départ imminent, retard, arrivée)
+    - On veut que l'application soit le plus simple à utiliser
 
-
-Vision plus moderne
-
-Tu peux aller vers :
-
-Réservation en ligne
-
-Les passagers réservent via mobile.
-
-QR Code sur billets
-
-Validation rapide à l’embarquement.
-
-Géolocalisation
-
-Suivi des cars en temps réel.
-
-Notifications
-
-SMS :
-
-départ imminent
-retard
-arrivée
-
-8. Réductions possibles
-
-Certaines gares gèrent :
-
-enfants,
-étudiants,
-abonnés,
-clients fidèles.
-
-Exemple :
-
-étudiant = -10%
-enfant = demi-tarif
-
-
-Réservation temporaire
-
-Blocage de siège avant paiement.
-
-
-
-Pour le filtre multi-gare on vas le faire plutard car il prend en compte d'autres notion donc on peut attaquer l'étape 3
- car des gares d'un même trajet doivent pouvoir partager des données
-
-
-
-
-- - 
-Dans un départ un client peut déscendre en route donc on doit avoir la possibilité de revendre un siège
-Comment on gère le grisage des sièges
-
-
-Si gare voit grisés uniquement les sièges qu'elle a elle-même vendus. Mais dans ce cas, comment le commercial à bord sait quels sièges sont physiquement occupés quand il est entre deux gares ?
-
-Un siège est occupé entre la gare d'embarquement et la gare de descente du client, donc un ticket doit porter **deux informations** : `gare_embarquement` et `gare_descente`.
-
-
-- A chaque gare intermédiare voilà comment il est arrivée et voilà comment il est parti - bordereau
-- - 
-
-
-
-Tarif sur voyage au lieu de trajet ça résoud le problème
-
-
-Sur ticket
-    A => D
-    départ: 08H
-    siège: 44
-    montant: 5000F
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- Courrier -> GroupCourrier avec un code pour savoir qu'on a mis ce lot de courrier dans un voyage
 - Les moyens de paiement ou règlement pour les tickets, courrier ou bagages pour savoir par quoi les clients paient le plus souvent
     > Sur la page de création de ticket :: Mobile money -> Ouvre panneau -> Mtn, Wave.. -> puis on saisi l'indentifiant du paiement dans la base de données
-- Lien vers les ressources de select sur la page de ceux qui en besoin
-- Select | Create User et List User
-    > Présélection + sur les champs select parente, crée et le présélectionne dans le champ
-- Un matricule pour les utilisateurs ayant vendu le ticket, enregistré bagage et courrier 
 - Courrier: séparer leur chiffre d'affaire avec celle de la société
-- Gérer le bordereau gare : /api/voyages/1/bordereau?gare=2
+
+- Reservation de ticket en ligne
+    - Les passagers réservent via mobile
+    - La réservation temporaire.. blocage de siège avant paiement
 
 - Ticket
-    - Code QR sur les tickets
-    - Un champ remise ex:1000 sur ticket,  :: on doit le prixvendu et béfinicière
-        - contactbeneficiaire
-    - Réduction dans ticket
-        - Beneficiaire -> soit on le crée ou on le choisi avec le select..
-            - Peut être un client qui vient toujours ou un corsaire(celui qui envoi le client) reçois identreprise et visible dans toutes les gares
-    - Carte de fidélité pour les meilleurs clients basé sur le numéro du client
-
-- Reservation de ticket, une personne peut rester chez lui à la maison et réservé un ticket ..puis le tire en ligne(perso)
-    - Application mobile pour les clients Réservation de tickets voir les départs, scanner un code qr (comportant toutes les informations du ticket)
+    - !! carte de fidélité pour les meilleurs clients basé sur le numéro de téléphone du client ou une vrai entité
+        Client
+        - nom
+        - contact
+        - numero_carte
+        - points
 
 - Place: de la droite vers la gauche et 6 places derrière
     3 4 5 2 1
     6 places
     - Vert: libre au départ, vendu: rouge, libérer à nouveau gris, ainsi de suite
 
-On vas gérer les dépenses : 2 types (Dépense générale et gare)
+- Le grisage des sièges
+    - Sol 1
+        - Dans la partie création de ticket, le faite de grisés les sièges en cas de vente ne conçernent que la gare qui vend, si le client ne décend pas à une gare intermédiaire ex: gare 2 elle doit voir les sièges grisé, les autres gares du même trajet peuvent vendre et verront en grisés les sièges qu'ils ont vendu
+            > Ex: Si la gare 1 vend 30/64, la gare 2 peut vendre les 64 places du départ sans tenir compte des places vendu à la gare précédente, le car arrive à la gare 2 des clients vont décendre et les autres montes au cas ou c'est rempli ou il y'a 2 tickets pour un même siège la gare 2 programme un autre départ avec un autre car pour les clients restants, vend les tickets et devient la gare de provenance du nouveau départ
+                > le problème : Tu dis que chaque gare voit grisés uniquement les sièges qu'elle a elle-même vendus. Mais dans ce cas, comment le commercial à bord sait quels sièges sont physiquement occupés quand il est entre deux gares ?
+
+    - Sol 2 : Je me dis qu'une solution est de grisé un siège selon la gare de destination du client pour toutes les gares du trajet :: Actuel
+
+
+- 
+déclarer comme perdu même lorsque le voyage est clôturer
+
+- Un polling en temps réel qui actualise l'affichage des sièges de la partie vente de tickets :: comment .. en temps réel
+- On vas associé le ticket du client à ses bagages comme ça le bagage aura pour provenance et destination celui du client
+- Si un car est déjà en dépannage tant que le dépannage n'est pas clôturer on ne doit pas pouvoir le mettre dans nouveau dépannage
+
+- Guide utilisateur
+- Explication et fonctionnement des modules importants de l'application
+
+
+- Table Ville sur Gare Tracé ce qui se passe dans l'application qui a fais quoi
+
+    - !! on vas la remise sur ticket (une réduction appliquée au prix normal du voyage) puis connaître le béfinicière, contactbeneficiaire
+        le système calcule un tarif de base,
+        puis applique éventuellement une réduction,
+        pour obtenir le montant final payé.
+        - Beneficiaire -> soit on le crée ou on le choisi avec le select..
+            - Peut être un client, enfants.. qui vient toujours ou un corsaire(celui qui envoi le client) reçois identreprise et visible dans toutes les gares
+
+- Le tirage du borderau à la gare d'arrivée va automatiquement clôturer le voyage pour la gare de destination et réceptioné le voyage pour une gare intermédiaire
+
+- Dans un voyage on un chauffeur et un commercial, le commercial est lié à la gare de provenance, le commercial peut vendre les tickets en route via un TPE dans le cas où un client monte en route, si un client déscend en route et non dans une gare intermédiaire le commercial doit avoir la possibilité de dégrisé un siège pour la revendre en appellant l'administrateur de la gare de provenance pour lui demander de dégrisé le siège pour qu'il le revend ou autre.
+    > Mais le commercial pose problème, comment sa carte s'actualise s'il est dans une gare intermédiaire lorsqu'ils vont vendre sièges
+
+- Dépenses : 2 types (Dépense générale et gare)
     Objetdepense -> libelle          Objetdepensegare..
     Depense                          Depensegare..
         objetdepense -> vers Objetdepense
@@ -154,115 +96,104 @@ On vas gérer les dépenses : 2 types (Dépense générale et gare)
         montant
         detail
 
-Table Ville
 
+- Ajouter le codeticket dans bagage, aussi le bagage aura pour destination celui du ticket du client.. :: ajouter la saisie de garedepart sur bagage
+    > bagage/_form.html.twig : pour un agent rattaché, la liste Gare de descente n'affiche que les arrêts après sa gare (évite l'erreur « descente avant le départ »), avec la mention « Départ depuis votre gare (X) ».
+    > Ajouter gare depart dans le formulaire
+- Historique Detailcar du genre si un car a été changer en cours de route
+    > Les petits détails du genre on veut pouvoir tout connaître dans l'application
+- Si une gare intermédiare receptionne un voyage .. heure de départ de sa gare
 
 
 
 
+Pré-requis : pour gérer des rôles, l'acteur de gare doit avoir une permission explicite Role_* — Role n'est volontairement pas dans le bypass de l'admin de gare (sinon il pourrait s'auto-déléguer la gestion des rôles en chaîne). C'est donc l'admin entreprise qui décide de lui ouvrir ce droit. ou Role dans le bypass
+Si une gare intermédiare doit créer un voyage il peut créer une ligne ou utiliser la ligne qui passe par lui actuellement
 
-1. Ce que tu décris réellement
 
-Tu as :
 
-Ligne :
-Abidjan → Korhogo
+- Plusieurs codes générés se basent sur des `count(...) + 1` ; cela peut poser des collisions en cas de créations concurrentes.
+- On vas mettre en place un verrou pessimiste pour la partie :
+    **Concurrence sur le stock** : `stockinitial` est lu puis écrit sans verrou ; deux sorties simultanées pourraient passer sous zéro
 
-Mais dans cette ligne :
 
-des passagers descendent à Yamoussoukro,
-d’autres à Bouaké,
-d’autres à Korhogo.
+### 8.3 🟠 ÉLEVÉ — IDOR inter-entreprises sur `Detailpersonnel` et `Detailcourrier`
 
-Donc :
+Ces deux ressources **n'implémentent pas `EntrepriseOwnedInterface`** et n'ont pas de champ `identreprise` → `EntrepriseScopeExtension` ne les filtre **pas**. Et le `PermissionVoter` ne vérifie que *« l'utilisateur possède la permission dans SON entreprise »*, jamais que *l'objet ciblé appartient à son entreprise*. Résultat : isolation tenant absente sur ces entités.
 
-un seul voyage,
-plusieurs destinations possibles,
-plusieurs tarifs.
+- **`Detailpersonnel`** (`Detailpersonnel.php:22-23`) : l'opération `Delete` a son `security: "is_granted('SUPPRIMER', object)"` **commenté**, elle retombe donc sur le `security` de classe `IS_AUTHENTICATED_FULLY`. → **N'importe quel utilisateur authentifié, de n'importe quelle entreprise, peut mettre en corbeille n'importe quel `detailpersonnel` par son id** (`DELETE /api/detailpersonnels/{id}`). Double problème : pas de permission métier **et** pas de scope entreprise.
+- **`Detailcourrier`** : CRUD complet avec permissions `VOIR/CREER/MODIFIER/SUPPRIMER`, mais sans scope entreprise → un utilisateur de l'entreprise A ayant la permission peut **lire/modifier/supprimer les `detailcourrier` de l'entreprise B** par id, et `GetCollection` **liste les données de toutes les entreprises**.
 
+→ *Correctif : faire implémenter `EntrepriseOwnedInterface` + `IdEntrepriseTrait` à ces entités (comme leurs parents), pour que `EntrepriseScopeExtension` les filtre automatiquement ; alimenter `identreprise` à la création (via `EntrepriseInjectionProcessor` / le processor parent). Et **décommenter** la sécurité `SUPPRIMER` sur `Detailpersonnel::Delete`.* À auditer pareillement : toute autre ressource exposée sans `EntrepriseOwnedInterface` (ex. `Siege`, cf. §8.5).
 
+- **`Siege` sans scope entreprise** — `SiegeStateProvider` fait `findBy(['car' => $carId])` à partir du paramètre `?car=` sans vérifier que le car (et le voyage) appartiennent à l'entreprise de l'appelant. Un utilisateur peut lire le **plan de salle et l'occupation (tickets)** des cars d'une autre entreprise en devinant des ids. `Siege` n'implémente pas `EntrepriseOwnedInterface` (il a `identreprise` mais le provider ne s'en sert pas). → Filtrer par `identreprise` dans le provider.
 
 
-Le gros défi métier : gestion des sièges
 
-C’est LE vrai problème maintenant.
 
-Exemple :
 
-siège 12 occupé jusqu’à Bouaké, puis libre après Bouaké.
-Le siège devient libre après l’arrêt
 
-Donc :
-un même siège peut être revendu après un arrêt.
+### Opus
 
+- **#1 (scoping par gare)** : reporté — sera traité plus tard avec le `GareScopeExtension`, car il dépend d'autres notions à intégrer. (point #4 sera couvert par ce même filtre.)
+- **Tarification = matrice complète O-D** : tout couple (montée, descente) le long de la ligne a son tarif (Abidjan→Bouaké, Yamoussoukro→Korhogo, Bouaké→Korhogo…).
+- **Places = capacité par segment** : un siège se libère à la descente et est revendable pour les tronçons suivants.
 
+### 9.4 Cœur du système : disponibilité des sièges par tronçon
 
+On modélise chaque ticket comme un **intervalle semi-ouvert** `[ordre(montée), ordre(descente))` sur le siège.
 
+```
+Arrêts :   Abidjan(0)   Yamoussoukro(1)   Bouaké(2)   Korhogo(3)
+Siège 12 :  ●───────────────────────────● B vendu              [0,2)  Abidjan→Bouaké
+                                          ●───────────────────● même siège revendable [2,3) Bouaké→Korhogo
+```
 
+**Test de chevauchement** de deux intervalles `[a,b)` et `[c,d)` :
+```
+chevauchement  ⟺  a < d  ET  c < b
+```
+- A=[0,2) (Abidjan→Bouaké) et B=[2,3) (Bouaké→Korhogo) : `0<3` ET `2<2`(faux) ⇒ **pas** de chevauchement → même siège OK.
+- A=[0,2) et C=[1,3) (Yamoussoukro→Korhogo) : `0<3` ET `1<2` ⇒ chevauchement → siège indisponible pour C.
 
+**Vente d'un ticket (siège S, montée m, descente d) :**
+1. `m`, `d` sont des arrêts de `voyage.ligne` et `ordre(m) < ordre(d)`.
+2. `TarifLigne(ligne, m, d)` existe → fixe le `prix`.
+3. Aucun ticket actif sur `(voyage, S)` dont l'intervalle chevauche `[ordre(m), ordre(d))`.
+4. Verrou pessimiste sur le `voyage` (déjà esquissé dans `TicketProcessor`) pour éviter le double-booking concurrent.
 
+Avec des **sièges nommés**, la capacité par tronçon est garantie automatiquement : on ne peut pas affecter un siège dont l'intervalle chevauche un ticket existant ⇒ pas besoin d'un compteur global.
 
+**`SiegeStateProvider` (à refondre)** : prend désormais `voyage` + `montee` + `descente` (le tronçon demandé). Un siège est `LIBRE` pour ce tronçon si aucun ticket du voyage ne le chevauche, sinon `OCCUPE`. Sans tronçon fourni, la disponibilité n'a plus de sens « globale » → l'UI doit d'abord demander montée/descente.
 
+### 9.5 Impact par module
 
+| **Courrier** | Ajouter `gareDescente` (gare d'arrivée du colis) ; garder `garedepart`=montée. Tarif **inchangé** (grille valeur/poids). ⚠️ `VoyageClotureSatutSubscriber` ne flippe `EN_TRANSIT→RECEPTIONNE` qu'à la clôture (terminus) : un colis destiné à Bouaké devrait être réceptionnable **à l'arrêt Bouaké**, pas seulement au terminus → décision (cf. 9.7). |
+| **Bagage** | Ajouter `gareDescente`. Tarif **inchangé** (poids). |
+| **Bordereau** | Chauffeur : afficher montée/descente par ticket/colis/bagage. Bordereau de gare : `gare` d'émission = gareMontee, logique de filtre conservée. |
+| **Tableau de bord** | « Taux de remplissage » n'est plus `placesoccupees/placestotal` mais **par tronçon** (ex. occupation max ou moyenne sur les segments). Recette billetterie = somme des `prix` (inchangé, prix simplement variables). |
 
+### 9.7 Points de vigilance / décisions restantes
+1. **Réception courrier par arrêt** : v1 simple = réception au terminus (clôture) ; v2 = transition par arrêt atteint. À trancher.
 
-6. Pourquoi cette structure est excellente
+## 14. Implémentation — métier courrier : réception à l'arrêt (faite le 2026-06-11)
 
-Parce qu’elle gère :
+> Décision #2 appliquée : un colis destiné à un **arrêt intermédiaire** arrive avant le terminus → il est réceptionné **à sa gare d'arrivée**, pas à la clôture du voyage.
 
-✅ multi-destinations
-✅ montées/descentes intermédiaires
-✅ revente des sièges
-✅ lignes longues distances
-✅ extensions futures
+### 14.1 Modifié / créé
+- **`ReceptionnerCourrierProcessor`** (nouveau) : `EN_TRANSIT → RECEPTIONNE`, garde sur le statut, `updatedBy/updatedAt`. (Restriction « agent de la gare d'arrivée » laissée en commentaire pour le futur `GareScopeExtension`.)
+- **`Courrier`** : nouvel endpoint `PATCH /api/courriers/{id}/receptionner` (sécurité `is_granted('MODIFIER', object)`), placé avant `livrer`. Flux complet : `EN_ATTENTE → EN_TRANSIT → RECEPTIONNE` (à l'arrêt) `→ LIVRE` (au destinataire).
+- **`VoyageClotureSatutSubscriber`** : à la clôture, n'auto-réceptionne plus que les colis **destinés au terminus** (`garearrivee == ligne.gareterminus`). Repli legacy conservé : voyage sans ligne ou colis sans `garearrivee` → comportement historique (auto-réception de tous). Les colis intermédiaires passent par l'endpoint manuel.
 
+### 14.3 Raffinements backend laissés de côté (non bloquants)
+- **Bagage** : reste livré (`LIVRE`) à la clôture (le bagage voyage avec le passager ; pas d'événement « descente passager », pas d'endpoint de remise bagage). Affinable plus tard si besoin (remise à `garedescente`).
+- Affichage montée/descente dans les **bordereaux** (DTOs `Output/Bordereau/*`) — cosmétique, étape frontend/output.
 
-
-
-
-
-
-
-
-- Lors de la création d'un trajet on vas liés les gares qui le conçerne, dans un trajet on a la gare de départ, la gare de destination et les gares intermédiares et on peut aussi les rangés par ordre
-    - Les utilisateurs d'une gare ne peuvent voir que les données des gares qui sont sur le même trajet que leur gare vu que des informations sont partagés entre des gares => C'est ici que le filtre de multi-gare va s'appliquer
-    - Une gare ne peut pas vendre un ticket d'un voyage qui n'est sur son trajet
-
-Une gare intermédiaire ne peut pas vendre les tickets de la gare précédente ou de provenance.. je me dis aussi que c'est pas nécéssaire vu qu'il ne voit pas la carte de la gare de provenance
-
-- Les gares intermédiares du trajet ne clôture pas le voyage mais receptionne, si une gare intermédiaire fais receptionné sur le voyage ça dégrise les sièges des clients qui doivent décendre à cette gare pour la gare de provenance
-    > Mais le commercial pose problème, comment sa carte s'actualise s'il est dans une gare intermédiaire lorsqu'il vont vendre sièges
-
-- Propose moi une solution propre et cohérent pour la partie dans laquelle on grise les sièges vendu :
-
-    - Dans la partie création de ticket, le faite de grisés les sièges en cas de vente ne conçernent que la gare qui vend, si le client ne décend pas à une gare intermédiaire ex: gare 2 elle doit voir les sièges grisé, les autres gares du même trajet peuvent vendre et verront en grisés les sièges qu'ils ont vendu
-        > le problème : Tu dis que chaque gare voit grisés uniquement les sièges qu'elle a elle-même vendus. Mais dans ce cas, comment le commercial à bord sait quels sièges sont physiquement occupés quand il est entre deux gares ?
-
-
-- Ex: Si la gare 1 vend 30/64, la gare 2 peut vendre les 64 places du départ sans tenir compte des places vendu à la gare précédente, le car arrive à la gare 2 des clients vont décendre et les autres montes au cas ou c'est rempli la gare 2 programme un autre départ avec un autre car pour les clients restants, vend les tickets et devient la gare de provenance du nouveau départ
-
-**Point 1 — La gare intermédiaire et les places.**
-Tu dis que la gare 2 peut vendre les 64 places sans tenir compte des 30 vendues en gare 1. C'est parce que les 30 clients de la gare 1 descendent obligatoirement à la gare 2 ? Ou c'est parce que certains clients de la gare 1 peuvent aller au-delà de la gare 2 (gare 3, destination finale) ?
-
-Vu que certains clients de la gare 1 peuvent aller au-delà de la gare 2, on doit empêcher que deux clients occupe le même siège donc je me dis qu'une solution est de grisé un siège selon la gare de destination du client pour toutes les gares du trajet
-
-
-
-- Dans un départ(voyage) on un chauffeur et un commercial, le commercial est lié à la gare de provenance, le commercial peut vendre les tickets en route via un TPE dans le cas ou un client monte en route, si un client déscend et qu'un autre monte le commercial va appeller l'administrateur de la gare de provenance pour lui demander de dégrisé le siège pour qu'il le revend
-- Des clients peuvent descendre dans les gares intermédiares ou en cours de chemin du départ(voyage) et d'autres peuvent monter pour prendre leur place donc on doit pouvoir revendre un siège plusieurs fois
-
-
-C'est a peu près la logique qu'on m'a expliquer, analyse bien pour être cohérent
-
-On vas aller étape par étape et liste par quoi on devrait commencer
-
-
-
-
-
-
-
-
+### 19.1 Flux complet désormais opérationnel (frontend + backend)
+1. Créer une **ligne** (arrêts ordonnés + grille tarifaire O-D) — UI `/ligne/nouveau`.
+2. Créer un **voyage** sur cette ligne — UI `/voyage/nouveau`.
+3. Affecter un car, puis **vendre des tickets par tronçon** (montée/descente, prix matrice, sièges par segment) — UI `/ticket/nouveau`.
+4. Courrier : réception **à l'arrêt** (`/api/courriers/{id}/receptionner`) ou ici on pourrais faire un receptionné sur voyage par la gare intermédiare de destination
 
 
 
@@ -270,817 +201,6 @@ On vas aller étape par étape et liste par quoi on devrait commencer
 
 
 - - 
-Bonne question sur les stats. Voici le raisonnement :
-
-**Soft delete seul** — le ticket disparaît des requêtes sans `deletedAt IS NULL`, donc les stats l'excluent automatiquement. ✅ Simple mais tu perds la distinction entre "supprimé" et "annulé".
-
-**Statut ANNULE seul** — le ticket reste visible partout, les stats doivent explicitement filtrer `statut != ANNULE`. ✅ Traçabilité complète mais plus de travail dans chaque requête.
-
-**Les deux** — le ticket a `statut = ANNULE` ET `deletedAt` rempli. Les stats existantes basées sur `deletedAt IS NULL` l'excluent automatiquement sans modification, ET tu gardes la trace de l'annulation via le statut. C'est le plus adapté à ton cas.
-
----
-
-### Implémentation complète
-
-**1 — Ajouter `statut` sur `Ticket`**
-
-```php
-// Ticket.php
-public const STATUTS = ['ACTIF', 'ANNULE'];
-
-#[ORM\Column(length: 20, options: ['default' => 'ACTIF'])]
-#[Groups(['read:Ticket', 'read:Voyage'])]
-private string $statut = 'ACTIF';
-
-public function getStatut(): string { return $this->statut; }
-public function setStatut(string $statut): static { $this->statut = $statut; return $this; }
-```
-
-Lance `make:migration` + `doctrine:migrations:migrate`.
-
----
-
-**2 — Opération d'annulation sur `Ticket`**
-
-```php
-// Dans l'entité Ticket — ajouter l'opération
-new Patch(
-    uriTemplate: '/tickets/{id}/annuler',
-    requirements: ['id' => '\d+'],
-    security: "is_granted('TICKET_SUPPRIMER', object)",
-    input: false,
-    processor: AnnulerTicketProcessor::class,
-    openapi: new Operation(
-        summary: 'Annuler un ticket',
-        security: [['bearerAuth' => []]]
-    )
-),
-```
-
----
-
-**3 — `AnnulerTicketProcessor`**
-
-```php
-<?php
-
-namespace App\State;
-
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProcessorInterface;
-use App\Entity\Ticket;
-use App\Entity\User;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-
-class AnnulerTicketProcessor implements ProcessorInterface
-{
-    public function __construct(
-        private ProcessorInterface     $processor,
-        private Security               $security,
-        private EntityManagerInterface $em,
-    ) {}
-
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): mixed
-    {
-        /** @var Ticket $data */
-        /** @var User $user */
-        $user = $this->security->getUser();
-
-        // Déjà annulé
-        if ($data->getStatut() === 'ANNULE') {
-            throw new BadRequestHttpException('Ce ticket est déjà annulé');
-        }
-
-        // Voyage clôturé
-        if ($data->getVoyage()?->getDatefin() !== null) {
-            throw new BadRequestHttpException(
-                'Impossible d\'annuler un ticket sur un voyage déjà clôturé'
-            );
-        }
-
-        // Marquer comme annulé + soft delete
-        $data->setStatut('ANNULE');
-        $data->setDeletedAt(new \DateTimeImmutable());
-        $data->setUpdatedBy($user->getId());
-
-        // Décrémenter placesoccupees du voyage
-        $voyage = $data->getVoyage();
-        if ($voyage && $voyage->getPlacesOccupees() > 0) {
-            $voyage->setPlacesOccupees($voyage->getPlacesOccupees() - 1);
-            $this->em->persist($voyage);
-        }
-
-        return $this->processor->process($data, $operation, $uriVariables, $context);
-    }
-}
-```
-
----
-
-**4 — `TicketController` — action `annuler`**
-
-```php
-#[Route('/{id}/annuler', name: 'annuler', methods: ['POST'], requirements: ['id' => '\d+'])]
-#[IsGranted('TICKET_SUPPRIMER')]
-public function annuler(int $id, Request $request): Response
-{
-    try {
-        $this->api->patch("/api/tickets/{$id}/annuler", []);
-        $this->addFlash('success', 'Ticket annulé avec succès');
-    } catch (ApiException $e) {
-        $response = $this->apiExceptionHandler->handle($e, null, 'ticket.show', ['id' => $id]);
-        if ($response) return $response;
-    }
-
-    return $this->redirectToRoute('ticket.show', ['id' => $id]);
-}
-```
-
----
-
-**5 — Bouton d'annulation dans `ticket/show.html.twig`**
-
-```twig
-{% if is_granted('TICKET_SUPPRIMER') and ticket.statut == 'ACTIF' and not ticket.voyage.datefin %}
-<form
-    method="POST"
-    action="{{ path('ticket.annuler', { id: ticket.id }) }}"
-    onsubmit="return confirm('Confirmer l\'annulation de ce ticket ? Cette action est irréversible.')"
->
-    <button type="submit" class="btn btn-destructive btn-sm gap-1.5">
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
-        Annuler le ticket
-    </button>
-</form>
-{% endif %}
-
-{# Badge statut sur la fiche #}
-{% if ticket.statut == 'ANNULE' %}
-<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-    Annulé
-</span>
-{% endif %}
-```
-
----
-
-**6 — Bouton dans la liste `ticket/index.html.twig` via le composant React**
-
-Dans `buildColumns` de ton `TicketTable.tsx`, ajouter dans le menu actions :
-
-```tsx
-{canDelete && ticket.statut === 'ACTIF' && !ticket.voyage?.datefin && (
-    <>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-            <form
-                method="POST"
-                action={`/ticket/${ticket.id}/annuler`}
-                onSubmit={(e) => {
-                    if (!confirm("Confirmer l'annulation de ce ticket ?")) {
-                        e.preventDefault()
-                    }
-                }}
-            >
-                <button
-                    type="submit"
-                    className="w-full text-left text-red-600 focus:text-red-700"
-                >
-                    Annuler le ticket
-                </button>
-            </form>
-        </DropdownMenuItem>
-    </>
-)}
-```
-
----
-
-### Récap de ce que ça fait
-
-Quand un ticket est annulé — `statut = ANNULE` + `deletedAt` rempli. Les stats existantes basées sur `deletedAt IS NULL` l'excluent automatiquement sans aucune modification. Le siège redevient libre immédiatement car `SiegeStateProvider` filtre déjà les tickets avec `deletedAt IS NULL`. `placesoccupees` du voyage est décrémenté atomiquement dans le processor.
-
-Deux conditions bloquantes : permission `TICKET_SUPPRIMER` + voyage non clôturé — les deux vérifiées côté Backend dans le processor ET côté Frontend pour masquer le bouton.
-
-
-
-
-
-
-Ah je comprends maintenant — tes stats comptent **tous** les tickets y compris les supprimés, pour avoir l'historique réel des ventes. Donc si tu mets `deletedAt` sur l'annulation, le ticket sera quand même compté dans les stats comme vendu, ce qui fausse les chiffres.
-
-Dans ce cas **statut ANNULE seul** est la bonne approche — pas de `deletedAt`. Le ticket reste visible en base, les stats filtrent explicitement sur `statut = 'ACTIF'` ou excluent `statut = 'ANNULE'`.
-
----
-
-### Ce qui change
-
-**`AnnulerTicketProcessor`** — supprimer le `deletedAt` :
-
-```php
-// ❌ Supprimer
-$data->setDeletedAt(new \DateTimeImmutable());
-
-// ✅ Uniquement le statut
-$data->setStatut('ANNULE');
-$data->setUpdatedBy($user->getId());
-
-// Décrémenter placesoccupees
-$voyage = $data->getVoyage();
-if ($voyage && $voyage->getPlacesOccupees() > 0) {
-    $voyage->setPlacesOccupees($voyage->getPlacesOccupees() - 1);
-    $this->em->persist($voyage);
-}
-```
-
----
-
-### Adapter les requêtes stats
-
-Partout dans tes providers/repositories de stats où tu comptes les tickets, ajouter le filtre `statut = 'ACTIF'` :
-
-```sql
--- Avant
-WHERE t.deleted_at IS NULL
-
--- Après
-WHERE t.deleted_at IS NULL AND t.statut = 'ACTIF'
-```
-
----
-
-### Adapter `SiegeStateProvider`
-
-Le siège doit redevenir libre quand le ticket est annulé — filtrer sur `statut = 'ACTIF'` :
-
-```php
-// Dans SiegeStateProvider
-$ticketsOccupes = $this->em->getRepository(Ticket::class)
-    ->findBy([
-        'voyage'    => $voyageId,
-        'statut'    => 'ACTIF',    // ← ajouter
-        'deletedAt' => null,
-    ]);
-```
-
----
-
-### Adapter `TicketProcessor` — bloquer la vente sur un siège annulé
-
-Si quelqu'un essaie de racheter un siège dont le ticket a été annulé, il doit pouvoir le faire — le siège est libre. La vérification existante cherche déjà les tickets `ACTIF` donc c'est bon si tu as bien filtré sur `statut`.
-
-
-
-
-
-Bonne question. Voici ce que ça impacte :
-
----
-
-### Méthodes impactées dans `TicketRepository`
-
-Toutes les méthodes qui agrègent des données sur les tickets doivent exclure les tickets annulés avec `t.statut = 'ACTIF'` :
-
-- `countTotal` — sinon les tickets annulés gonflent le compteur
-- `recettesTotales` — sinon la recette inclut des montants annulés
-- `recettesParJour` — idem
-- `detailParAgentEtVoyage` — idem
-- `detailParJourEtVoyage` — idem
-- `recettesParTrajet` — idem
-- `recettesParCar` — idem
-- `findByVoyage` — le bordereau chauffeur ne doit pas lister les tickets annulés
-- `findBordereauStats` et `findPassagers` — le bordereau gare idem
-
----
-
-### Correction à appliquer partout
-
-Ajouter sur chaque query :
-
-```php
-->andWhere('t.statut = :statut')
-->setParameter('statut', 'ACTIF')
-```
-
----
-
-### Ce qui n'est pas impacté
-
-- `placesoccupees` sur `Voyage` — si tu gères la décrémentation à l'annulation côté processor, c'est déjà cohérent
-- Les stats Bagage et Courrier — pas de statut ACTIF sur ces entités, leur annulation passe par leurs propres statuts déjà filtrés
-
----
-
-### Impact sur le `Voyage`
-
-Si `placesoccupees` est décrémenté à l'annulation du ticket, le taux de remplissage dans `ExploitationStatsProvider` reste correct puisqu'il se base sur `v.placesoccupees`. Sinon il faudra recalculer depuis les tickets actifs uniquement.
-
-Tu décrémentes `placesoccupees` à l'annulation ?
-
-
-
-
-
-
-
-
-Parfait. Voici l'architecture complète.
-
----
-
-### Ce qui se passe lors d'un désistement
-
-```
-Ticket original (ACTIF, voyage A, siège 5)
-    └── statut → DESISTE
-    └── placesoccupees voyage A → -1
-    └── siège 5 du voyage A → LIBRE
-
-Nouveau ticket (ACTIF, voyage B, siège X)
-    └── nouveau codeticket
-    └── ticketOrigine → référence vers l'ancien ticket
-    └── placesoccupees voyage B → +1
-    └── prix → tarif du voyage B (peut différer)
-```
-
----
-
-### 1 — Ajouter les champs sur `Ticket`
-
-```php
-// Ticket.php
-
-public const STATUTS = ['ACTIF', 'ANNULE', 'DESISTE'];
-
-// Référence vers le ticket d'origine (si ce ticket est issu d'un report)
-#[ORM\ManyToOne(targetEntity: self::class)]
-#[ORM\JoinColumn(nullable: true)]
-#[Groups(['read:Ticket'])]
-private ?self $ticketOrigine = null;
-
-// Référence vers le ticket de report (si ce ticket a été reporté)
-#[ORM\OneToOne(targetEntity: self::class)]
-#[ORM\JoinColumn(nullable: true)]
-#[Groups(['read:Ticket'])]
-private ?self $ticketReport = null;
-
-public function getTicketOrigine(): ?self { return $this->ticketOrigine; }
-public function setTicketOrigine(?self $t): static { $this->ticketOrigine = $t; return $this; }
-public function getTicketReport(): ?self { return $this->ticketReport; }
-public function setTicketReport(?self $t): static { $this->ticketReport = $t; return $this; }
-```
-
-Lance `make:migration` + `doctrine:migrations:migrate`.
-
----
-
-### 2 — DTO input pour le désistement
-
-```php
-<?php
-
-namespace App\Dto;
-
-use App\Entity\Gare;
-use App\Entity\Siege;
-use App\Entity\Voyage;
-use Symfony\Component\Serializer\Annotation\Groups;
-use Symfony\Component\Validator\Constraints as Assert;
-
-class DesistementInput
-{
-    #[Assert\NotNull(message: 'Le nouveau voyage est obligatoire')]
-    #[Groups(['write:Desistement'])]
-    public ?Voyage $nouveauVoyage = null;
-
-    #[Assert\NotNull(message: 'Le nouveau siège est obligatoire')]
-    #[Groups(['write:Desistement'])]
-    public ?Siege $nouveauSiege = null;
-
-    #[Assert\NotNull(message: 'La gare est obligatoire')]
-    #[Groups(['write:Desistement'])]
-    public ?Gare $gare = null;
-}
-```
-
----
-
-### 3 — Opération sur `Ticket`
-
-```php
-new Post(
-    uriTemplate: '/tickets/{id}/desistement',
-    uriVariables: ['id' => new Link(fromClass: Ticket::class)],
-    requirements: ['id' => '\d+'],
-    security: "is_granted('TICKET_MODIFIER', object)",
-    input: DesistementInput::class,
-    output: Ticket::class,
-    processor: DesistementProcessor::class,
-    openapi: new Operation(
-        summary: 'Désistement — annule et reporte un ticket sur un nouveau voyage',
-        security: [['bearerAuth' => []]]
-    )
-),
-```
-
----
-
-### 4 — `DesistementProcessor`
-
-```php
-<?php
-
-namespace App\State;
-
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProcessorInterface;
-use App\Dto\DesistementInput;
-use App\Entity\Ticket;
-use App\Entity\User;
-use App\Repository\TicketRepository;
-use App\Repository\TarifRepository;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-
-class DesistementProcessor implements ProcessorInterface
-{
-    public function __construct(
-        private ProcessorInterface     $processor,
-        private Security               $security,
-        private EntityManagerInterface $em,
-        private TicketRepository       $ticketRepository,
-        private TarifRepository        $tarifRepository,
-    ) {}
-
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = []): Ticket
-    {
-        /** @var DesistementInput $data */
-        /** @var User $user */
-        $user         = $this->security->getUser();
-        $identreprise = $user->getEntreprise()->getId();
-
-        // Charger le ticket original
-        $ticketOriginal = $this->em->getRepository(Ticket::class)->find($uriVariables['id']);
-
-        if (!$ticketOriginal || $ticketOriginal->getIdentreprise() !== $identreprise) {
-            throw new BadRequestHttpException('Ticket introuvable');
-        }
-
-        if ($ticketOriginal->getStatut() !== 'ACTIF') {
-            throw new BadRequestHttpException('Seul un ticket actif peut faire l\'objet d\'un désistement');
-        }
-
-        if ($ticketOriginal->getVoyage()?->getDatefin() !== null) {
-            throw new BadRequestHttpException('Impossible de reporter un ticket sur un voyage clôturé');
-        }
-
-        $nouveauVoyage = $data->nouveauVoyage;
-        $nouveauSiege  = $data->nouveauSiege;
-        $gare          = $data->gare;
-
-        // Vérifier que le nouveau voyage est actif
-        if ($nouveauVoyage->getDatefin() !== null) {
-            throw new BadRequestHttpException('Le nouveau voyage est déjà clôturé');
-        }
-
-        // Vérifier que le nouveau siège est libre
-        $siegeOccupe = $this->ticketRepository->findOneBy([
-            'siege'     => $nouveauSiege,
-            'voyage'    => $nouveauVoyage,
-            'statut'    => 'ACTIF',
-            'deletedAt' => null,
-        ]);
-
-        if ($siegeOccupe) {
-            throw new BadRequestHttpException(
-                sprintf('Le siège %d est déjà occupé sur ce voyage', $nouveauSiege->getNumero())
-            );
-        }
-
-        // Vérifier que le siège appartient au car du nouveau voyage
-        if ($nouveauSiege->getCar()->getId() !== $nouveauVoyage->getCar()?->getId()) {
-            throw new BadRequestHttpException('Ce siège n\'appartient pas au véhicule du nouveau voyage');
-        }
-
-        // Calculer le prix selon le tarif du nouveau voyage
-        $tarif = $this->tarifRepository->findOneBy([
-            'trajet'       => $nouveauVoyage->getTrajet(),
-            'identreprise' => $identreprise,
-        ]);
-        $nouveauPrix = $tarif ? (int) $tarif->getPrix() : $ticketOriginal->getPrix();
-
-        // ── 1. Marquer l'ancien ticket comme DESISTE ──────────────────────
-        $ticketOriginal->setStatut('DESISTE');
-        $ticketOriginal->setUpdatedBy($user->getId());
-        $this->em->persist($ticketOriginal);
-
-        // Décrémenter placesoccupees de l'ancien voyage
-        $ancienVoyage = $ticketOriginal->getVoyage();
-        if ($ancienVoyage && $ancienVoyage->getPlacesOccupees() > 0) {
-            $ancienVoyage->setPlacesOccupees($ancienVoyage->getPlacesOccupees() - 1);
-            $this->em->persist($ancienVoyage);
-        }
-
-        // ── 2. Créer le nouveau ticket ────────────────────────────────────
-        $count = $this->ticketRepository->count([
-            'identreprise' => $identreprise,
-            'deletedAt'    => null,
-        ]) + 1;
-
-        $nouveauTicket = new Ticket();
-        $nouveauTicket
-            ->setVoyage($nouveauVoyage)
-            ->setSiege($nouveauSiege)
-            ->setGare($gare)
-            ->setNomclient($ticketOriginal->getNomclient())
-            ->setContactclient($ticketOriginal->getContactclient())
-            ->setPrix($nouveauPrix)
-            ->setStatut('ACTIF')
-            ->setIdentreprise($identreprise)
-            ->setCreatedBy($user->getId())
-            ->setCodeticket(
-                $nouveauVoyage->getTrajet()->getCodetrajet()
-                . '-T' . str_pad($count, 5, '0', STR_PAD_LEFT)
-            )
-            ->setTicketOrigine($ticketOriginal);
-
-        // Incrémenter placesoccupees du nouveau voyage
-        $nouveauVoyage->setPlacesOccupees($nouveauVoyage->getPlacesOccupees() + 1);
-        $this->em->persist($nouveauVoyage);
-        $this->em->persist($nouveauTicket);
-
-        // Lier l'ancien ticket au nouveau
-        $ticketOriginal->setTicketReport($nouveauTicket);
-        $this->em->persist($ticketOriginal);
-
-        $this->em->flush();
-
-        return $nouveauTicket;
-    }
-}
-```
-
----
-
-### 5 — `TicketController` — action `desistement`
-
-```php
-#[Route('/{id}/desistement', name: 'desistement', methods: ['GET', 'POST'], requirements: ['id' => '\d+'])]
-#[IsGranted('TICKET_MODIFIER')]
-public function desistement(int $id, Request $request): Response
-{
-    try {
-        $ticket  = $this->api->item('/api/tickets/' . $id);
-        $voyages = array_values(array_filter(
-            $this->api->collection('/api/voyages'),
-            fn($v) => empty($v['datefin']) && $v['id'] !== $ticket['voyage']['id']
-        ));
-        $gares = $this->api->collection('/api/gares');
-    } catch (ApiException $e) {
-        $response = $this->apiExceptionHandler->handle($e, null, 'ticket.show', ['id' => $id]);
-        if ($response) return $response;
-    }
-
-    if ($request->isMethod('POST')) {
-        $data = $request->request->all();
-
-        try {
-            $nouveauTicket = $this->api->post("/api/tickets/{$id}/desistement", [
-                'nouveauVoyage' => '/api/voyages/' . $data['voyage'],
-                'nouveauSiege'  => '/api/sieges/'  . $data['siege'],
-                'gare'          => '/api/gares/'   . $data['gare'],
-            ]);
-
-            $this->addFlash('success', 'Désistement enregistré. Nouveau ticket : ' . $nouveauTicket['codeticket']);
-            return $this->redirectToRoute('ticket.show', ['id' => $nouveauTicket['id']]);
-
-        } catch (ApiException $e) {
-            $response = $this->apiExceptionHandler->handle($e, null, 'ticket.desistement', ['id' => $id]);
-            if ($response) return $response;
-        }
-    }
-
-    return $this->render('ticket/desistement.html.twig', [
-        'ticket'  => $ticket,
-        'voyages' => $voyages,
-        'gares'   => $gares,
-    ]);
-}
-```
-
----
-
-### 6 — `ticket/desistement.html.twig`
-
-```twig
-{% extends 'base.html.twig' %}
-{% block title %}Désistement — Ticket {{ ticket.codeticket }}{% endblock %}
-
-{% block body %}
-<div class="max-w-[600px] mx-auto">
-
-    <div class="mb-6">
-        <h1 class="text-4xl font-light tracking-[-0.55px]">Désistement</h1>
-        <p class="text-sm text-muted-foreground mt-1">
-            Reporter le ticket <span class="font-mono font-semibold">{{ ticket.codeticket }}</span>
-            sur un nouveau voyage
-        </p>
-    </div>
-
-    {# Récap ticket original #}
-    <div class="rounded-xl border bg-card shadow-sm p-5 mb-6">
-        <p class="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-3">
-            Ticket original
-        </p>
-        <div class="grid grid-cols-2 gap-3 text-sm">
-            <div>
-                <p class="text-muted-foreground text-xs">Voyage</p>
-                <p class="font-medium">{{ ticket.voyage.provenance }} → {{ ticket.voyage.destination }}</p>
-            </div>
-            <div>
-                <p class="text-muted-foreground text-xs">Siège</p>
-                <p class="font-medium">{{ ticket.siege.numero }}</p>
-            </div>
-            <div>
-                <p class="text-muted-foreground text-xs">Passager</p>
-                <p class="font-medium">{{ ticket.nomclient ?? '—' }}</p>
-            </div>
-            <div>
-                <p class="text-muted-foreground text-xs">Prix payé</p>
-                <p class="font-semibold text-emerald-600">
-                    {{ ticket.prix|number_format(0, ',', ' ') }} FCFA
-                </p>
-            </div>
-        </div>
-    </div>
-
-    {# Formulaire report #}
-    <form method="POST" action="{{ path('ticket.desistement', { id: ticket.id }) }}">
-        <div class="rounded-xl border bg-card shadow-sm p-5 space-y-4">
-            <p class="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-                Nouveau départ
-            </p>
-
-            {# Nouveau voyage #}
-            <div class="space-y-1.5">
-                <label class="text-sm font-medium">Nouveau voyage</label>
-                <select
-                    name="voyage"
-                    required
-                    id="select-voyage"
-                    class="input w-full"
-                    data-remote-select="voyages"
-                >
-                    <option value="">-- Sélectionner un voyage --</option>
-                    {% for v in voyages %}
-                    <option value="{{ v.id }}">
-                        {{ v.codevoyage }} — {{ v.provenance }} → {{ v.destination }}
-                        ({{ v.placestotal - v.placesoccupees }} places restantes)
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            {# Nouveau siège — chargé dynamiquement #}
-            <div class="space-y-1.5" id="siege-wrapper" style="display:none">
-                <label class="text-sm font-medium">Nouveau siège</label>
-                <select name="siege" required id="select-siege" class="input w-full">
-                    <option value="">-- Sélectionner un siège --</option>
-                </select>
-            </div>
-
-            {# Gare #}
-            <div class="space-y-1.5">
-                <label class="text-sm font-medium">Gare d'embarquement</label>
-                <select
-                    name="gare"
-                    required
-                    class="input w-full"
-                    data-remote-select="gares"
-                >
-                    <option value="">-- Sélectionner une gare --</option>
-                    {% for g in gares %}
-                    <option value="{{ g.id }}">{{ g.libelle }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            {# Différence de prix — affiché dynamiquement #}
-            <div id="diff-prix" class="hidden rounded-lg px-4 py-3 text-sm"></div>
-        </div>
-
-        <div class="flex items-center justify-between mt-4">
-            <a href="{{ path('ticket.show', { id: ticket.id }) }}" class="btn btn-outline btn-sm">
-                ← Annuler
-            </a>
-            <button type="submit" class="btn btn-primary btn-sm">
-                Confirmer le désistement
-            </button>
-        </div>
-    </form>
-</div>
-
-<script>
-(function () {
-    const selectVoyage = document.getElementById('select-voyage')
-    const selectSiege  = document.getElementById('select-siege')
-    const siegeWrapper = document.getElementById('siege-wrapper')
-    const diffPrix     = document.getElementById('diff-prix')
-    const prixOriginal = {{ ticket.prix }}
-
-    selectVoyage?.addEventListener('change', async (e) => {
-        const voyageId = e.target.value
-        if (!voyageId) {
-            siegeWrapper.style.display = 'none'
-            return
-        }
-
-        // Charger les sièges libres du nouveau voyage
-        const res  = await fetch(`/ticket/sieges/${voyageId}`)
-        const data = await res.json()
-
-        selectSiege.innerHTML = '<option value="">-- Sélectionner un siège --</option>'
-        data.sieges
-            .filter(s => s.statut === 'LIBRE')
-            .forEach(s => {
-                const opt = document.createElement('option')
-                opt.value       = s.id
-                opt.textContent = `Siège ${s.numero} (${s.cote})`
-                selectSiege.appendChild(opt)
-            })
-
-        siegeWrapper.style.display = 'block'
-
-        // Afficher la différence de prix si tarif différent
-        const voyageOpt = e.target.selectedOptions[0]
-        // Optionnel : fetch /api/tarifs?trajet=... pour comparer
-    })
-})()
-</script>
-{% endblock %}
-```
-
----
-
-### 7 — Afficher l'historique sur `ticket/show.html.twig`
-
-```twig
-{# Si ce ticket est un report #}
-{% if ticket.ticketOrigine %}
-<div class="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm">
-    <p class="font-medium text-amber-700 mb-1">Ce ticket est un report</p>
-    <p class="text-amber-600">
-        Ticket original :
-        <a href="{{ path('ticket.show', { id: ticket.ticketOrigine.id }) }}"
-           class="font-mono font-semibold hover:underline">
-            {{ ticket.ticketOrigine.codeticket }}
-        </a>
-        — {{ ticket.ticketOrigine.voyage.provenance }} → {{ ticket.ticketOrigine.voyage.destination }}
-    </p>
-</div>
-{% endif %}
-
-{# Si ce ticket a été reporté #}
-{% if ticket.ticketReport %}
-<div class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 text-sm">
-    <p class="font-medium text-zinc-600 mb-1">Ce ticket a fait l'objet d'un désistement</p>
-    <p class="text-zinc-500">
-        Nouveau ticket :
-        <a href="{{ path('ticket.show', { id: ticket.ticketReport.id }) }}"
-           class="font-mono font-semibold hover:underline">
-            {{ ticket.ticketReport.codeticket }}
-        </a>
-        — {{ ticket.ticketReport.voyage.provenance }} → {{ ticket.ticketReport.voyage.destination }}
-    </p>
-</div>
-{% endif %}
-
-{# Bouton désistement #}
-{% if is_granted('TICKET_MODIFIER') and ticket.statut == 'ACTIF' and not ticket.voyage.datefin and not ticket.ticketReport %}
-<a href="{{ path('ticket.desistement', { id: ticket.id }) }}" class="btn btn-outline btn-sm gap-1.5">
-    Report de voyage
-</a>
-{% endif %}
-```
-
----
-
-### Récap
-
-Le désistement crée une chaîne traçable : `ticketOriginal (DESISTE) → ticketNouveau (ACTIF)`. Les stats comptent le ticket original comme vendu (il reste en base avec `statut = DESISTE`) et comptent aussi le nouveau ticket. Le siège de l'ancien voyage est libéré immédiatement. Le prix est recalculé selon le tarif du nouveau trajet.
-
-
-
-
-
-
-
-
 Le flux le plus adapté est **l'autocomplete sur le codeticket ou nomclient** pour ces raisons :
 
 - L'agent au chargement a le ticket physique du client devant lui → il peut scanner/saisir le code directement
@@ -1424,221 +544,6 @@ N'oublie pas de renommer les champs dans `TarifbagageFormType` (`poidsmin/poidsm
 
 
 
-
-Tu as raison — si un colis est perdu la compagnie doit rembourser sa valeur, donc **le montant ne change pas** (c'est la dette de la compagnie). Le recalcul n'a pas de sens ici.
-
-On garde donc :
-- Montant inchangé
-- Statut `PERDU` sur le `Detailcourrier`
-- Si tous les colis sont `PERDU` → `Courrier` passe automatiquement à `PERDU`
-
----
-
-## Backend
-
-### Ajout `statut` dans `Detailcourrier`
-
-```php
-public const STATUT_NORMAL = 'NORMAL';
-public const STATUT_PERDU  = 'PERDU';
-
-#[ORM\Column(length: 50)]
-#[Groups(['read:Detailcourrier', 'read:Courrier'])]
-private string $statut = self::STATUT_NORMAL;
-
-public function getStatut(): string { return $this->statut; }
-public function setStatut(string $statut): static { $this->statut = $statut; return $this; }
-```
-
----
-
-### Endpoint dans `Detailcourrier`
-
-```php
-new Patch(
-    security: "is_granted('MODIFIER', object)",
-    uriTemplate: '/detailcourriers/{id}/perdu',
-    requirements: ['id' => '\d+'],
-    input: false,
-    processor: PerduDetailcourrierProcessor::class,
-    openapi: new Operation(
-        summary: 'Déclarer un colis comme perdu',
-        description: 'Marque le colis comme perdu et met à jour le statut du courrier si nécessaire',
-        security: [['bearerAuth' => []]]
-    )
-),
-```
-
----
-
-### `PerduDetailcourrierProcessor`
-
-```php
-<?php
-
-namespace App\State;
-
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProcessorInterface;
-use App\Domain\Enum\CourrierStatus;
-use App\Entity\Detailcourrier;
-use App\Entity\User;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-
-class PerduDetailcourrierProcessor implements ProcessorInterface
-{
-    public function __construct(
-        private ProcessorInterface $processor,
-        private Security $security,
-        private EntityManagerInterface $em
-    ) {}
-
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
-    {
-        /** @var Detailcourrier $data */
-        /** @var User $user */
-        $user = $this->security->getUser();
-
-        // Un colis déjà perdu ne peut pas être re-déclaré perdu
-        if ($data->getStatut() === Detailcourrier::STATUT_PERDU) {
-            throw new BadRequestHttpException('Ce colis est déjà déclaré perdu');
-        }
-
-        // Le courrier doit être en transit ou réceptionné pour déclarer un colis perdu
-        $courrier = $data->getCourrier();
-        if (!in_array($courrier->getStatut(), [
-            CourrierStatus::STATUT_EN_TRANSIT->value,
-            CourrierStatus::STATUT_RECEPTIONNE->value,
-        ])) {
-            throw new BadRequestHttpException(
-                'Un colis ne peut être déclaré perdu que si le courrier est en transit ou réceptionné'
-            );
-        }
-
-        // Marquer le colis comme perdu
-        $data->setStatut(Detailcourrier::STATUT_PERDU);
-
-        // Vérifier si tous les colis sont perdus
-        $tousLesColissPerdus = true;
-        foreach ($courrier->getDetailcourriers() as $detail) {
-            // Exclure le colis actuel (déjà mis à jour en mémoire)
-            if ($detail->getId() === $data->getId()) continue;
-
-            if ($detail->getStatut() !== Detailcourrier::STATUT_PERDU) {
-                $tousLesColissPerdus = false;
-                break;
-            }
-        }
-
-        if ($tousLesColissPerdus) {
-            $courrier->setStatut(CourrierStatus::STATUT_PERDU->value);
-            $this->em->persist($courrier);
-        }
-
-        return $this->processor->process($data, $operation, $uriVariables, $context);
-    }
-}
-```
-
----
-
-### Migration
-
-```bash
-php bin/console make:migration
-php bin/console doctrine:migrations:migrate
-```
-
----
-
-## Frontend
-
-### Route dans `CourrierController`
-
-```php
-#[Route('/colis/{id}/perdu', name: 'colis.perdu', methods: ['POST'], requirements: ['id' => Requirement::DIGITS])]
-#[IsGranted('COURRIER_MODIFIER')]
-public function colisPerdu(int $id, Request $request): Response
-{
-    $courrierId = $request->request->get('courrier_id');
-
-    try {
-        $this->api->patch('/api/detailcourriers/' . $id . '/perdu');
-        $this->addFlash('success', 'Le colis a été déclaré perdu');
-    } catch (ApiException $e) {
-        $response = $this->apiExceptionHandler->handle($e, null, 'courrier.show', ['id' => $courrierId]);
-        if ($response) return $response;
-    }
-
-    return $this->redirectToRoute('courrier.show', ['id' => $courrierId]);
-}
-```
-
----
-
-### Dans `courrier/show.html.twig` — table des colis
-
-```twig
-{% set typeMap = {
-    NORMAL:     ['Normal',     'bg-gray-100 text-gray-700'],
-    FRAGILE:    ['Fragile',    'bg-yellow-50 text-yellow-700'],
-    VOLUMINEUX: ['Volumineux', 'bg-purple-50 text-purple-700']
-} %}
-
-{% for detail in courrier.detailcourriers %}
-{% set tc = typeMap[detail.type] ?? [detail.type, 'bg-gray-100 text-gray-700'] %}
-<tr class="hover:bg-muted/20 transition-colors {{ detail.statut == 'PERDU' ? 'opacity-60' : '' }}">
-    <td class="px-4 py-3">{{ detail.nature }}</td>
-    <td class="px-4 py-3 font-medium">{{ detail.designation }}</td>
-    <td class="px-4 py-3 text-muted-foreground">{{ detail.emballage ?? '—' }}</td>
-    <td class="px-4 py-3">
-        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ tc[1] }}">
-            {{ tc[0] }}
-        </span>
-    </td>
-    <td class="px-4 py-3 text-muted-foreground">{{ detail.poids ? detail.poids ~ ' kg' : '—' }}</td>
-    <td class="px-4 py-3 tabular-nums">{{ detail.valeur|number_format(0, ',', ' ') }} FCFA</td>
-    <td class="px-4 py-3 text-right tabular-nums font-semibold">
-        {{ detail.montant|number_format(0, ',', ' ') }} FCFA
-    </td>
-    <td class="px-4 py-3">
-        {% if detail.statut == 'PERDU' %}
-            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
-                Perdu
-            </span>
-        {% else %}
-            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800">
-                Normal
-            </span>
-        {% endif %}
-    </td>
-    <td class="px-4 py-3">
-        {% if is_granted('COURRIER_MODIFIER')
-            and detail.statut == 'NORMAL'
-            and courrier.statut in ['EN_TRANSIT', 'RECEPTIONNE'] %}
-        <form method="POST"
-              action="{{ path('courrier.colis.perdu', { id: detail.id }) }}"
-              class="inline"
-              onsubmit="return confirm('Déclarer ce colis comme perdu ?')">
-            <input type="hidden" name="courrier_id" value="{{ courrier.id }}">
-            <button type="submit" class="btn btn-danger btn-sm">
-                Déclarer perdu
-            </button>
-        </form>
-        {% endif %}
-    </td>
-</tr>
-{% endfor %}
-```
-
-Quelle est la suite ?
-
-
-
-
-
 ## Backend
 
 ### `DeleteAccountInput`
@@ -1886,6 +791,7 @@ public function deleteAccount(Request $request): Response
 ```
 
 Quelle est la suite ?
+
 
 
 
@@ -2646,594 +1552,6 @@ Les deux fonctionnent en parallèle — quand tu actives la maintenance via l'in
 
 
 
-
-
-Parfait. On code.
-
----
-
-## Architecture
-
-```
-Backend  → stocke quels guides ont été complétés par utilisateur
-Frontend → Driver.js déclenche le guide, appelle l'API pour marquer comme vu
-```
-
----
-
-## Backend
-
-### Entité `UserGuide`
-
-```php
-<?php
-
-namespace App\Entity;
-
-use App\Repository\UserGuideRepository;
-use Doctrine\ORM\Mapping as ORM;
-
-#[ORM\Entity(repositoryClass: UserGuideRepository::class)]
-#[ORM\UniqueConstraint(fields: ['userId', 'guide'])]
-class UserGuide
-{
-    #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
-    private ?int $id = null;
-
-    #[ORM\Column]
-    private int $userId;
-
-    #[ORM\Column(length: 100)]
-    private string $guide; // ex: 'billetterie', 'exploitation', 'stock'
-
-    #[ORM\Column]
-    private \DateTimeImmutable $completedAt;
-
-    public function __construct(int $userId, string $guide)
-    {
-        $this->userId      = $userId;
-        $this->guide       = $guide;
-        $this->completedAt = new \DateTimeImmutable();
-    }
-
-    public function getId(): ?int { return $this->id; }
-    public function getUserId(): int { return $this->userId; }
-    public function getGuide(): string { return $this->guide; }
-    public function getCompletedAt(): \DateTimeImmutable { return $this->completedAt; }
-}
-```
-
----
-
-### Endpoint API Platform sur `User`
-
-```php
-// Dans l'entité User — deux nouvelles opérations
-
-new Get(
-    security: "is_granted('ROLE_USER')",
-    uriTemplate: '/me/guides',
-    provider: UserGuidesProvider::class,
-    openapi: new Operation(
-        summary: 'Guides complétés par l\'utilisateur',
-        security: [['bearerAuth' => []]]
-    )
-),
-new Post(
-    security: "is_granted('ROLE_USER')",
-    uriTemplate: '/me/guides/{guide}/complete',
-    provider: CorbeilleEmptyProvider::class,
-    processor: CompleteGuideProcessor::class,
-    openapi: new Operation(
-        summary: 'Marquer un guide comme complété',
-        security: [['bearerAuth' => []]]
-    )
-),
-```
-
----
-
-### `UserGuidesProvider`
-
-```php
-<?php
-
-namespace App\State;
-
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProviderInterface;
-use App\Entity\User;
-use App\Repository\UserGuideRepository;
-use Symfony\Bundle\SecurityBundle\Security;
-
-class UserGuidesProvider implements ProviderInterface
-{
-    public function __construct(
-        private Security $security,
-        private UserGuideRepository $userGuideRepository
-    ) {}
-
-    public function provide(Operation $operation, array $uriVariables = [], array $context = []): array
-    {
-        /** @var User $user */
-        $user   = $this->security->getUser();
-        $guides = $this->userGuideRepository->findBy(['userId' => $user->getId()]);
-
-        return array_map(
-            fn($g) => [
-                'guide'       => $g->getGuide(),
-                'completedAt' => $g->getCompletedAt()->format('Y-m-d H:i'),
-            ],
-            $guides
-        );
-    }
-}
-```
-
----
-
-### `CompleteGuideProcessor`
-
-```php
-<?php
-
-namespace App\State;
-
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProcessorInterface;
-use App\Entity\User;
-use App\Entity\UserGuide;
-use App\Repository\UserGuideRepository;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\SecurityBundle\Security;
-
-class CompleteGuideProcessor implements ProcessorInterface
-{
-    public function __construct(
-        private Security $security,
-        private EntityManagerInterface $em,
-        private UserGuideRepository $userGuideRepository
-    ) {}
-
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
-    {
-        /** @var User $user */
-        $user  = $this->security->getUser();
-        $guide = $uriVariables['guide'] ?? null;
-
-        if (!$guide) return null;
-
-        // Idempotent — on ne crée pas en doublon
-        $existing = $this->userGuideRepository->findOneBy([
-            'userId' => $user->getId(),
-            'guide'  => $guide,
-        ]);
-
-        if (!$existing) {
-            $userGuide = new UserGuide($user->getId(), $guide);
-            $this->em->persist($userGuide);
-            $this->em->flush();
-        }
-
-        return ['guide' => $guide, 'completed' => true];
-    }
-}
-```
-
----
-
-### Migration
-
-```bash
-php bin/console make:migration
-php bin/console doctrine:migrations:migrate
-```
-
----
-
-## Frontend
-
-### Installation Driver.js
-
-```bash
-npm install driver.js
-```
-
----
-
-### `guide.ts` — module réutilisable
-
-```typescript
-import { driver, DriveStep } from 'driver.js'
-import 'driver.js/dist/driver.css'
-
-const GUIDES_ENDPOINT = '/auth/token' // ton endpoint token existant
-
-async function getCompletedGuides(): Promise<string[]> {
-    try {
-        const token = await fetchToken()
-        const res   = await fetch('/api/me/guides', {
-            headers: { Authorization: `Bearer ${token}` }
-        })
-        if (!res.ok) return []
-        const data = await res.json()
-        return (data['hydra:member'] ?? data).map((g: any) => g.guide)
-    } catch {
-        return []
-    }
-}
-
-async function markGuideComplete(guide: string): Promise<void> {
-    try {
-        const token = await fetchToken()
-        await fetch(`/api/me/guides/${guide}/complete`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            }
-        })
-    } catch {
-        // silencieux
-    }
-}
-
-async function fetchToken(): Promise<string> {
-    const res  = await fetch('/auth/token')
-    const data = await res.json()
-    return data.token
-}
-
-export async function startGuide(
-    guideName: string,
-    steps: DriveStep[],
-    options: { auto?: boolean } = {}
-): Promise<void> {
-    const completed = await getCompletedGuides()
-    const isCompleted = completed.includes(guideName)
-
-    // Si auto et déjà complété → on ne lance pas
-    if (options.auto && isCompleted) return
-
-    const driverObj = driver({
-        showProgress:    true,
-        showButtons:     ['next', 'previous', 'close'],
-        nextBtnText:     'Suivant →',
-        prevBtnText:     '← Précédent',
-        doneBtnText:     'Terminer',
-        progressText:    '__current__ / __total__',
-        allowClose:      true,
-        overlayColor:    'rgb(0, 0, 0)',
-        overlayOpacity:  0.5,
-        smoothScroll:    true,
-        steps,
-        onDestroyStarted: () => {
-            // Marquer comme complété quand l'utilisateur ferme ou termine
-            markGuideComplete(guideName)
-            driverObj.destroy()
-        },
-    })
-
-    driverObj.drive()
-}
-```
-
----
-
-### Exemple de guide — module Billetterie
-
-```typescript
-// assets/js/guides/billetterie.ts
-import { startGuide } from '../guide'
-import type { DriveStep } from 'driver.js'
-
-const steps: DriveStep[] = [
-    {
-        element: '#btn-new-ticket',
-        popover: {
-            title:       '🎟️ Créer un ticket',
-            description: 'Cliquez ici pour créer un nouveau ticket pour un voyageur.',
-            side:        'bottom',
-            align:       'start',
-        }
-    },
-    {
-        element: '#ticket-table',
-        popover: {
-            title:       '📋 Liste des tickets',
-            description: 'Retrouvez ici tous les tickets émis pour ce voyage. Vous pouvez filtrer et trier.',
-            side:        'top',
-        }
-    },
-    {
-        element: '#btn-print-bordereau',
-        popover: {
-            title:       '🖨️ Imprimer le bordereau',
-            description: 'Imprimez le bordereau récapitulatif de tous les tickets du voyage.',
-            side:        'left',
-        }
-    },
-]
-
-// Démarrage automatique à la première visite
-export function initBilleterieGuide(auto = false) {
-    startGuide('billetterie', steps, { auto })
-}
-```
-
----
-
-### Intégration dans les vues Twig
-
-Dans `billetterie/index.html.twig` :
-
-```twig
-{# -- Bouton aide -- #}
-<button type="button" id="btn-guide-billetterie" class="btn btn-secondary btn-sm">
-    <svg class="h-4 w-4" aria-hidden="true"><use href="{{ asset('sprite.svg') }}#help"></use></svg>
-    Guide
-</button>
-
-<script type="module">
-    import { initBilleterieGuide } from '/build/guides/billetterie.js'
-
-    // Auto au premier chargement
-    initBilleterieGuide(true)
-
-    // Bouton pour relancer manuellement
-    document.getElementById('btn-guide-billetterie')
-        .addEventListener('click', () => initBilleterieGuide(false))
-</script>
-```
-
----
-
-### `webpack.config.js` — entrées des guides
-
-```javascript
-Encore
-    // ...entrées existantes...
-    .addEntry('guides/billetterie', './assets/js/guides/billetterie.ts')
-    .addEntry('guides/exploitation', './assets/js/guides/exploitation.ts')
-    .addEntry('guides/stock', './assets/js/guides/stock.ts')
-    // ...
-```
-
----
-
-### Exemple de guide — module Exploitation
-
-```typescript
-// assets/js/guides/exploitation.ts
-import { startGuide } from '../guide'
-import type { DriveStep } from 'driver.js'
-
-const steps: DriveStep[] = [
-    {
-        element: '#btn-new-voyage',
-        popover: {
-            title:       '🚌 Créer un voyage',
-            description: 'Créez un nouveau voyage en définissant le trajet, le car et les horaires.',
-            side:        'bottom',
-        }
-    },
-    {
-        element: '#voyage-table',
-        popover: {
-            title:       '📅 Liste des voyages',
-            description: 'Gérez vos voyages ici. Filtrez par statut, date ou trajet.',
-            side:        'top',
-        }
-    },
-    {
-        element: '#filter-statut',
-        popover: {
-            title:       '🔍 Filtrer par statut',
-            description: 'Filtrez les voyages par statut : En cours, Terminé, Annulé...',
-            side:        'bottom',
-        }
-    },
-]
-
-export function initExploitationGuide(auto = false) {
-    startGuide('exploitation', steps, { auto })
-}
-```
-
----
-
-## Réinitialiser les guides complétés
-
-Pour permettre à l'utilisateur de réinitialiser ses guides depuis son profil :
-
-### Endpoint
-
-```php
-new Post(
-    security: "is_granted('ROLE_USER')",
-    uriTemplate: '/me/guides/reset',
-    provider: CorbeilleEmptyProvider::class,
-    processor: ResetGuidesProcessor::class,
-    openapi: new Operation(
-        summary: 'Réinitialiser tous les guides',
-        security: [['bearerAuth' => []]]
-    )
-),
-```
-
-### `ResetGuidesProcessor`
-
-```php
-<?php
-
-namespace App\State;
-
-use ApiPlatform\Metadata\Operation;
-use ApiPlatform\State\ProcessorInterface;
-use App\Entity\User;
-use App\Entity\UserGuide;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Bundle\SecurityBundle\Security;
-
-class ResetGuidesProcessor implements ProcessorInterface
-{
-    public function __construct(
-        private Security $security,
-        private EntityManagerInterface $em
-    ) {}
-
-    public function process(mixed $data, Operation $operation, array $uriVariables = [], array $context = [])
-    {
-        /** @var User $user */
-        $user   = $this->security->getUser();
-        $guides = $this->em->getRepository(UserGuide::class)->findBy([
-            'userId' => $user->getId()
-        ]);
-
-        foreach ($guides as $guide) {
-            $this->em->remove($guide);
-        }
-        $this->em->flush();
-
-        return ['message' => 'Guides réinitialisés'];
-    }
-}
-```
-
-### Bouton dans `profil/index.html.twig`
-
-```twig
-<div class="card p-5">
-    <h2 class="text-lg font-semibold mb-2">Guides d'utilisation</h2>
-    <p class="text-sm text-muted-foreground mb-4">
-        Réinitialisez les guides pour les revoir depuis le début à votre prochaine visite.
-    </p>
-    <form method="POST" action="{{ path('profil.reset_guides') }}">
-        <button type="submit" class="btn btn-secondary btn-sm"
-                onclick="return confirm('Réinitialiser tous les guides ?')">
-            Réinitialiser les guides
-        </button>
-    </form>
-</div>
-```
-
-### Route dans `ProfilController`
-
-```php
-#[Route('/profil/guides/reset', name: 'profil.reset_guides', methods: ['POST'])]
-#[IsGranted('ROLE_USER')]
-public function resetGuides(): Response
-{
-    try {
-        $this->api->post('/api/me/guides/reset');
-        $this->addFlash('success', 'Guides réinitialisés avec succès');
-    } catch (ApiException $e) {
-        $this->addFlash('error', 'Erreur lors de la réinitialisation');
-    }
-
-    return $this->redirectToRoute('profil.index');
-}
-```
-
-Quelle est la suite ?
-
-
-
-
-
-
-
-
-C'est le comportement par défaut de Doctrine avec `@MappedSuperclass` — les colonnes de la classe parente apparaissent en premier dans la table.
-
-Pour contrôler l'ordre des colonnes, tu peux utiliser `columnDefinition` ou plus simplement **réorganiser via une migration manuelle**, mais la solution propre dans Doctrine est d'utiliser l'attribut `#[ORM\Column]` avec l'option `columnDefinition` ... ce qui est verbeux.
-
-**La vraie solution : `AttributeOverride` ou changer l'approche**
-
-Doctrine ne fournit pas d'option native pour réordonner les colonnes d'un `MappedSuperclass`. Les colonnes du parent viennent toujours en premier.
-
-Tes options :
-
----
-
-**Option 1 — Accepter l'ordre et réorganiser via migration SQL**
-
-C'est la plus simple. L'ordre des colonnes en base n'a aucun impact fonctionnel. Tu modifies la table manuellement :
-
-```sql
-ALTER TABLE ma_table MODIFY COLUMN created_at DATETIME AFTER derniere_colonne_metier;
-```
-
-À refaire à chaque nouvelle table, mais sans impact sur le code.
-
----
-
-**Option 2 — Inverser la logique : trait au lieu de MappedSuperclass**
-
-C'est l'approche recommandée quand l'ordre des colonnes compte. Tu transformes `EntityBase` en **trait** :
-
-```php
-trait EntityBaseTrait
-{
-    #[ORM\Column(name: "created_at", type: "datetime_immutable", nullable: true)]
-    protected ?DateTimeImmutable $createdAt = null;
-
-    // ... toutes les propriétés
-
-    #[ORM\PrePersist]
-    public function onPrePersist(): void { ... }
-
-    #[ORM\PreUpdate]
-    public function onPreUpdate(): void { ... }
-}
-```
-
-Puis dans chaque entité, tu places le `use` **après** tes propres propriétés :
-
-```php
-#[ORM\Entity]
-#[ORM\HasLifecycleCallbacks]
-class User
-{
-    #[ORM\Id]
-    #[ORM\Column]
-    private int $id;
-
-    #[ORM\Column]
-    private string $email;
-
-    // ... tes colonnes métier
-
-    use EntityBaseTrait; // ← placé en dernier = colonnes en dernier en DB
-}
-```
-
-Doctrine respecte l'ordre de déclaration dans la classe, donc les colonnes du trait arrivent **après** les propriétés déclarées avant le `use`.
-
----
-
-**Option 3 — Garder MappedSuperclass + `#[ORM\HasLifecycleCallbacks]` sur les enfants**
-
-Si tu veux garder l'héritage de classe mais juste déplacer certaines colonnes clés (comme `id`) dans l'enfant, c'est structurellement impossible avec `MappedSuperclass` — l'ordre parent → enfant est figé.
-
----
-
-**Recommandation**
-
-Le **trait** (Option 2) est la solution la plus propre pour ton cas. Elle te donne le contrôle total sur l'ordre des colonnes sans SQL manuel, et les lifecycle callbacks fonctionnent correctement tant que `#[ORM\HasLifecycleCallbacks]` est sur l'entité concrète.
-
-L'`abstract class` peut rester pour la logique non-Doctrine (méthodes utilitaires, etc.) si tu veux garder une hiérarchie, mais les propriétés mappées passent dans le trait.
-
-
-
-
-
-
-
-
-
 Parfait 🔥 on va construire un **système d’alertes intelligent** pour ton app — et là on passe en mode **produit pro**.
 
 ---
@@ -3533,70 +1851,552 @@ Dis-moi :
 
 
 
-## 2. EntityBase
 
-> Les timestamps sont gérés par les lifecycle callbacks Doctrine.
-> `createdBy`, `updatedBy`, `deletedBy` sont alimentés par `EntityAuditSubscriber`.
 
-## 12. EntityAuditSubscriber
+- Tarifligne
 
-> Doctrine n'a pas accès au container dans les lifecycle callbacks des entités. On utilise un event subscriber pour peupler `createdBy`, `updatedBy`, `deletedBy`.
+# Revenir au modèle `TarifLigne` — code complet
+
+Guide **prêt à coller** pour repasser de la grille tarifaire **globale** (`Tarif` gare→gare) au modèle
+**`TarifLigne`** (un tarif par couple de gares **et par ligne**).
+
+> Rappel du compromis : `TarifLigne` réintroduit la duplication du prix d'un segment partagé par plusieurs
+> lignes. À ne faire que si tu veux réellement des prix **différents selon la ligne**.
+
+---
+
+# BACKEND (`BK-Transport`)
+
+## 1. `src/Entity/TarifLigne.php` (NOUVEAU fichier)
 
 ```php
-// src/EventSubscriber/EntityAuditSubscriber.php
 <?php
 
-namespace App\EventSubscriber;
+namespace App\Entity;
 
-use App\Entity\EntityBase;
-use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
-use Doctrine\ORM\Events;
-use Doctrine\Persistence\Event\LifecycleEventArgs;
-use Symfony\Bundle\SecurityBundle\Security;
+use App\Repository\TarifLigneRepository;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Validator\Constraints as Assert;
 
-#[AsDoctrineListener(event: Events::prePersist)]
-#[AsDoctrineListener(event: Events::preUpdate)]
-#[AsDoctrineListener(event: Events::preRemove)]
-class EntityAuditSubscriber
+#[ORM\Entity(repositoryClass: TarifLigneRepository::class)]
+#[ORM\UniqueConstraint(name: 'UNIQ_tarifligne', columns: ['ligne_id', 'garedepart_id', 'garearrivee_id'])]
+class TarifLigne
 {
-    public function __construct(private readonly Security $security) {}
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column]
+    #[Groups(['read:Ligne', 'read:Ligne:item'])]
+    private ?int $id = null;
 
-    public function prePersist(LifecycleEventArgs $args): void
+    #[ORM\ManyToOne(inversedBy: 'tariflignes')]
+    #[ORM\JoinColumn(nullable: false)]
+    private ?Ligne $ligne = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['read:Ligne', 'read:Ligne:item'])]
+    private ?Gare $garedepart = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['read:Ligne', 'read:Ligne:item'])]
+    private ?Gare $garearrivee = null;
+
+    #[ORM\Column]
+    #[Groups(['read:Ligne', 'read:Ligne:item'])]
+    #[Assert\Positive(message: 'Le montant doit être strictement positif')]
+    private ?int $montant = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $identreprise = null;
+
+    public function getId(): ?int { return $this->id; }
+
+    public function getLigne(): ?Ligne { return $this->ligne; }
+    public function setLigne(?Ligne $ligne): static { $this->ligne = $ligne; return $this; }
+
+    public function getGaredepart(): ?Gare { return $this->garedepart; }
+    public function setGaredepart(?Gare $garedepart): static { $this->garedepart = $garedepart; return $this; }
+
+    public function getGarearrivee(): ?Gare { return $this->garearrivee; }
+    public function setGarearrivee(?Gare $garearrivee): static { $this->garearrivee = $garearrivee; return $this; }
+
+    public function getMontant(): ?int { return $this->montant; }
+    public function setMontant(int $montant): static { $this->montant = $montant; return $this; }
+
+    public function getIdentreprise(): ?int { return $this->identreprise; }
+    public function setIdentreprise(?int $identreprise): static { $this->identreprise = $identreprise; return $this; }
+}
+```
+
+> `TarifLigne` est volontairement une entité **simple** (pas de `EntityBase`/soft-delete) : c'est de la
+> config, recréée à chaque édition de ligne (orphanRemoval). Elle n'a **pas** d'`ApiResource` : elle est
+> gérée via `LigneInput`/`LigneProcessor` et lue via `read:Ligne`.
+
+## 2. `src/Repository/TarifLigneRepository.php` (NOUVEAU fichier)
+
+```php
+<?php
+
+namespace App\Repository;
+
+use App\Entity\TarifLigne;
+use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\Persistence\ManagerRegistry;
+
+/**
+ * @extends ServiceEntityRepository<TarifLigne>
+ */
+class TarifLigneRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $registry)
     {
-        $entity = $args->getObject();
-        if (!$entity instanceof EntityBase) {
-            return;
-        }
-        $identifier = $this->security->getUser()?->getUserIdentifier();
-        if ($identifier) {
-            $entity->setCreatedBy($identifier);
-            $entity->setUpdatedBy($identifier);
-        }
+        parent::__construct($registry, TarifLigne::class);
     }
 
-    public function preUpdate(LifecycleEventArgs $args): void
+    /** Prix d'un segment (garedepart → garearrivee) POUR une ligne donnée. */
+    public function findMontant(int $ligneId, int $gareDepartId, int $gareArriveeId, int $entrepriseId): ?TarifLigne
     {
-        $entity = $args->getObject();
-        if (!$entity instanceof EntityBase) {
-            return;
-        }
-        $identifier = $this->security->getUser()?->getUserIdentifier();
-        if ($identifier) {
-            $entity->setUpdatedBy($identifier);
-        }
-    }
-
-    public function preRemove(LifecycleEventArgs $args): void
-    {
-        $entity = $args->getObject();
-        if (!$entity instanceof EntityBase) {
-            return;
-        }
-        $identifier = $this->security->getUser()?->getUserIdentifier();
-        if ($identifier) {
-            $entity->setDeletedBy($identifier);
-            $entity->setDeletedAt(new \DateTimeImmutable());
-        }
+        return $this->findOneBy([
+            'ligne' => $ligneId,
+            'garedepart' => $gareDepartId,
+            'garearrivee' => $gareArriveeId,
+            'identreprise' => $entrepriseId,
+        ]);
     }
 }
 ```
+
+## 3. `src/Entity/Ligne.php` (MODIF : ajouter la collection `tariflignes`)
+
+Ajouter la propriété (après la collection `$arrets`, vers la ligne 134) :
+
+```php
+    /**
+     * @var Collection<int, TarifLigne>
+     */
+    #[ORM\OneToMany(targetEntity: TarifLigne::class, mappedBy: 'ligne', cascade: ['persist'], orphanRemoval: true)]
+    #[Groups(['read:Ligne', 'read:Ligne:item'])]
+    private Collection $tariflignes;
+```
+
+Dans le **constructeur** :
+
+```php
+    public function __construct()
+    {
+        $this->arrets = new ArrayCollection();
+        $this->voyages = new ArrayCollection();
+        $this->tariflignes = new ArrayCollection(); // <-- ajouter
+    }
+```
+
+Ajouter les méthodes (par ex. après `removeArret`) :
+
+```php
+    /**
+     * @return Collection<int, TarifLigne>
+     */
+    public function getTariflignes(): Collection
+    {
+        return $this->tariflignes;
+    }
+
+    public function addTarifligne(TarifLigne $tarifligne): static
+    {
+        if (!$this->tariflignes->contains($tarifligne)) {
+            $this->tariflignes->add($tarifligne);
+            $tarifligne->setLigne($this);
+        }
+        return $this;
+    }
+
+    public function removeTarifligne(TarifLigne $tarifligne): static
+    {
+        if ($this->tariflignes->removeElement($tarifligne)) {
+            if ($tarifligne->getLigne() === $this) {
+                $tarifligne->setLigne(null);
+            }
+        }
+        return $this;
+    }
+```
+
+> `TarifLigne` est dans le même namespace `App\Entity` → pas d'import à ajouter.
+
+## 4. `src/Entity/Dto/LigneInput.php` (MODIF : ajouter `tarifs`)
+
+```php
+    /**
+     * Grille tarifaire : [['garedepart' => 12, 'garearrivee' => 7, 'montant' => 8000], ...]
+     * @var array<int, array{garedepart: int, garearrivee: int, montant: int}>
+     */
+    #[Groups(['write:LigneInput'])]
+    public array $tarifs = [];
+```
+
+## 5. `src/State/LigneProcessor.php` (MODIF)
+
+**a.** Dans le bloc `Patch`, supprimer les anciens `tariflignes` AVANT recréation (juste après la
+suppression des arrêts, avant le `$this->em->flush();`) :
+
+```php
+            // Hard delete des anciens tarifs de ligne (config, recréée)
+            foreach ($ligne->getTariflignes()->toArray() as $tl) {
+                $this->em->remove($tl);
+            }
+            $ligne->getTariflignes()->clear();
+```
+
+**b.** Après l'appel `$this->handleArrets(...)`, récupérer la map des ordres et appeler `handleTarifs` :
+
+```php
+        $ordreParGare = $this->handleArrets($ligne, $data->arrets, $entrepriseId);
+        $this->handleTarifs($ligne, $data->tarifs, $ordreParGare, $entrepriseId);
+```
+
+> `handleArrets` retourne déjà `array<int,int> gareId => ordre` — on s'en sert pour valider que chaque
+> tarif relie deux arrêts existants dans le bon sens.
+
+**c.** Ajouter la méthode `handleTarifs` :
+
+```php
+    /**
+     * Crée les TarifLigne à partir de l'input, en validant que chaque couple est constitué
+     * d'arrêts de la ligne et orienté dans le sens du trajet (départ avant arrivée).
+     *
+     * @param array<int, array{garedepart:int, garearrivee:int, montant:int}> $tarifs
+     * @param array<int,int> $ordreParGare  map gareId => ordre
+     */
+    private function handleTarifs(Ligne $ligne, array $tarifs, array $ordreParGare, int $entrepriseId): void
+    {
+        $vus = [];
+        foreach ($tarifs as $t) {
+            $departId = (int) ($t['garedepart'] ?? 0);
+            $arriveeId = (int) ($t['garearrivee'] ?? 0);
+            $montant = (int) ($t['montant'] ?? 0);
+
+            if ($montant <= 0) {
+                throw new BadRequestHttpException('Le montant d\'un tarif doit être strictement positif');
+            }
+            if (!isset($ordreParGare[$departId], $ordreParGare[$arriveeId])) {
+                throw new BadRequestHttpException('Un tarif référence une gare qui n\'est pas un arrêt de la ligne');
+            }
+            if ($ordreParGare[$departId] >= $ordreParGare[$arriveeId]) {
+                throw new BadRequestHttpException('Un tarif doit aller d\'un arrêt vers un arrêt situé après lui');
+            }
+            $key = $departId . '-' . $arriveeId;
+            if (isset($vus[$key])) {
+                throw new BadRequestHttpException('Un couple de gares est en doublon dans la grille tarifaire');
+            }
+            $vus[$key] = true;
+
+            $tarifLigne = new TarifLigne();
+            $tarifLigne
+                ->setGaredepart($this->gareRepository->find($departId))
+                ->setGarearrivee($this->gareRepository->find($arriveeId))
+                ->setMontant($montant)
+                ->setIdentreprise($entrepriseId);
+            $ligne->addTarifligne($tarifLigne);
+        }
+    }
+```
+
+**d.** Ajouter l'import en tête de fichier :
+
+```php
+use App\Entity\TarifLigne;
+```
+
+## 6. `src/State/TicketProcessor.php` (MODIF : prix par ligne)
+
+**a.** Imports : remplacer
+
+```php
+use App\Repository\TarifRepository;
+```
+
+par
+
+```php
+use App\Repository\TarifLigneRepository;
+```
+
+**b.** Constructeur : remplacer le paramètre
+
+```php
+        private TarifRepository $tarifRepository
+```
+
+par
+
+```php
+        private TarifLigneRepository $tarifLigneRepository
+```
+
+**c.** Résolution du prix (étape 4) : remplacer
+
+```php
+        $tarif = $this->tarifRepository->findMontant($monteeId, $descenteId, $entrepriseId);
+```
+
+par
+
+```php
+        $tarif = $this->tarifLigneRepository->findMontant($ligne->getId(), $monteeId, $descenteId, $entrepriseId);
+```
+
+> `$ligne` est déjà disponible dans le processor. `$tarif->getMontant()` reste inchangé.
+
+## 7. `src/Entity/Data/CorbeilleRegistry.php` (MODIF, optionnel)
+
+Si tu **gardes** `TarifLigne` dans la corbeille — mais comme `TarifLigne` n'a **pas** de soft-delete, tu
+peux simplement **retirer** la ligne `'tarif' => Tarif::class` (si tu supprimes l'entité globale) et ne
+rien ajouter. Si tu veux gérer la corbeille de `TarifLigne`, il faut d'abord lui donner `EntityBase`.
+
+```php
+// Retirer si on supprime l'entité globale :
+//   use App\Entity\Tarif;   ← supprimer l'import
+//   'tarif' => Tarif::class, ← supprimer l'entrée
+```
+
+## 8. Suppression de l'entité globale `Tarif` (si tu l'abandonnes)
+
+Supprimer : `src/Entity/Tarif.php`, `src/Repository/TarifRepository.php`, `src/State/TarifProcessor.php`,
+et retirer `Tarif` de `CorbeilleRegistry`. (Sinon, la garder en parallèle ne gêne pas.)
+
+## 9. Migration (NOUVELLE) — `src/migrations/VersionXXXXXXXXXXXXXX.php`
+
+`php bin/console make:migration` puis remplacer le contenu par :
+
+```php
+public function up(Schema $schema): void
+{
+    // 1. Recréer la table tarif_ligne (schéma d'origine, cf. Version20260611213840)
+    $this->addSql('CREATE TABLE tarif_ligne (id INT AUTO_INCREMENT NOT NULL, montant INT NOT NULL, identreprise INT DEFAULT NULL, ligne_id INT NOT NULL, garedepart_id INT NOT NULL, garearrivee_id INT NOT NULL, INDEX IDX_8EC440735A438E76 (ligne_id), INDEX IDX_8EC4407316887400 (garedepart_id), INDEX IDX_8EC44073B466CD0 (garearrivee_id), UNIQUE INDEX UNIQ_tarifligne (ligne_id, garedepart_id, garearrivee_id), PRIMARY KEY (id)) DEFAULT CHARACTER SET utf8mb4');
+    $this->addSql('ALTER TABLE tarif_ligne ADD CONSTRAINT FK_8EC440735A438E76 FOREIGN KEY (ligne_id) REFERENCES ligne (id)');
+    $this->addSql('ALTER TABLE tarif_ligne ADD CONSTRAINT FK_8EC4407316887400 FOREIGN KEY (garedepart_id) REFERENCES gare (id)');
+    $this->addSql('ALTER TABLE tarif_ligne ADD CONSTRAINT FK_8EC44073B466CD0 FOREIGN KEY (garearrivee_id) REFERENCES gare (id)');
+
+    // 2. Fan-out : pour chaque ligne, chaque couple (arrêt amont, arrêt aval), reprendre le prix global
+    $this->addSql('
+        INSERT INTO tarif_ligne (ligne_id, garedepart_id, garearrivee_id, montant, identreprise)
+        SELECT a1.ligne_id, a1.gare_id, a2.gare_id, t.montant, l.identreprise
+        FROM arret a1
+        JOIN arret a2 ON a2.ligne_id = a1.ligne_id AND a2.ordre > a1.ordre
+        JOIN ligne l ON l.id = a1.ligne_id
+        JOIN tarif t ON t.garedepart_id = a1.gare_id
+                    AND t.garearrivee_id = a2.gare_id
+                    AND t.identreprise = l.identreprise
+                    AND t.deleted_at IS NULL
+    ');
+
+    // 3. (optionnel) supprimer la grille globale
+    $this->addSql('DROP TABLE tarif');
+}
+
+public function down(Schema $schema): void
+{
+    // Best-effort inverse : recréer tarif depuis tarif_ligne (MAX par couple), puis drop tarif_ligne.
+    $this->addSql('DROP TABLE tarif_ligne');
+}
+```
+
+> ⚠️ Le fan-out ne crée des tarifs que pour les couples couverts par un `tarif` global. Vérifie ensuite
+> qu'aucun segment vendable ne reste sans `TarifLigne`.
+
+---
+
+# FRONTEND (`FT-Transport`)
+
+## 10. `assets/react/models/ligne.model.ts` (MODIF)
+
+```ts
+export interface TarifLigne {
+    garedepart: GareRef
+    garearrivee: GareRef
+    montant: number
+}
+
+export interface Ligne {
+    id: number
+    codeligne: string
+    libelle: string | null
+    gareorigine: GareRef
+    gareterminus: GareRef
+    arrets: Arret[]
+    tariflignes: TarifLigne[]   // <-- ajouter
+    voyagesCount: number
+}
+```
+
+## 11. `assets/react/controllers/Exploitation/LigneForm.tsx` (MODIF : remettre la grille)
+
+**a.** Étendre l'interface initiale :
+
+```ts
+interface LigneInitial {
+    id: number
+    libelle: string | null
+    heuredepart?: string | null
+    arrets: { gare: GareRef; ordre: number }[]
+    tariflignes?: { garedepart: { id: number }; garearrivee: { id: number }; montant: number }[]
+}
+```
+
+**b.** State + helpers (sous les autres `useState`) :
+
+```ts
+    const pairKey = (a: number, b: number) => `${a}-${b}`
+
+    const [fares, setFares] = useState<Record<string, string>>(() => {
+        const init: Record<string, string> = {}
+        ligne?.tariflignes?.forEach((t) => {
+            init[pairKey(t.garedepart.id, t.garearrivee.id)] = String(t.montant)
+        })
+        return init
+    })
+
+    // Toutes les paires (amont < aval) des arrêts ordonnés
+    const pairs = useMemo(
+        () =>
+            stops.flatMap((dep, i) =>
+                stops.slice(i + 1).map((arr) => ({ depart: dep, arrivee: arr }))
+            ),
+        [stops]
+    )
+
+    const setFare = (key: string, value: string) =>
+        setFares((prev) => ({ ...prev, [key]: value }))
+```
+
+**c.** Dans `handleSubmit`, construire `tarifs` et l'ajouter au payload (avant le `fetch`) :
+
+```ts
+        // Tarifs renseignés uniquement (montant > 0)
+        const tarifs = pairs
+            .map((p) => ({
+                garedepart: p.depart.id,
+                garearrivee: p.arrivee.id,
+                montant: Number(fares[pairKey(p.depart.id, p.arrivee.id)] || 0),
+            }))
+            .filter((t) => t.montant > 0)
+
+        const payload = {
+            libelle: libelle.trim(),
+            heuredepart: heuredepart || null,
+            arrets: stops.map((s, idx) => ({ gare: s.id, ordre: idx })),
+            tarifs, // <-- ajouter
+        }
+```
+
+**d.** Carte « Grille tarifaire » (JSX, avant le bloc des boutons Annuler/Créer) :
+
+```tsx
+            {/* Grille tarifaire (matrice O-D) */}
+            {stops.length >= 2 && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Grille tarifaire</CardTitle>
+                        <CardDescription>Prix par tronçon (origine → arrêt suivant…).</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                        {pairs.map((p) => {
+                            const key = pairKey(p.depart.id, p.arrivee.id)
+                            return (
+                                <div key={key} className="flex items-center gap-3">
+                                    <span className="flex-1 text-sm">
+                                        {p.depart.libelle} <span className="text-muted-foreground mx-1">→</span> {p.arrivee.libelle}
+                                    </span>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        placeholder="FCFA"
+                                        className="w-32"
+                                        value={fares[key] ?? ""}
+                                        onChange={(e) => setFare(key, e.target.value)}
+                                    />
+                                </div>
+                            )
+                        })}
+                    </CardContent>
+                </Card>
+            )}
+```
+
+> `Card, CardHeader, CardTitle, CardDescription, CardContent, Input, useMemo` sont déjà importés dans
+> `LigneForm.tsx`.
+
+## 12. `src/Controller/LigneController.php` (MODIF : renvoyer `tarifs`)
+
+Dans `new` **et** `edit`, ajouter `tarifs` au payload envoyé à l'API :
+
+```php
+            $ligne = $this->api->post('/api/lignes', [
+                'libelle' => $payload['libelle'] ?? null,
+                'heuredepart' => $payload['heuredepart'] ?? null,
+                'arrets' => $payload['arrets'] ?? [],
+                'tarifs' => $payload['tarifs'] ?? [],   // <-- ajouter
+            ]);
+```
+
+(idem pour le `$this->api->patch('/api/lignes/' . $id, [...])` dans `edit`).
+
+## 13. `templates/ligne/show.html.twig` (MODIF : remettre la carte)
+
+Remplacer la note « grille tarifaire globale » par la carte qui itère `ligne.tariflignes` :
+
+```twig
+    <div class="card p-6 mb-3">
+        <h3 class="text-lg font-bold mb-3">Grille tarifaire</h3>
+        <ul class="space-y-2">
+            {% for tarif in ligne.tariflignes %}
+            <li class="flex items-center justify-between gap-3 text-sm">
+                <span>
+                    <span class="font-medium">{{ tarif.garedepart.libelle }}</span>
+                    <span class="mx-1.5 text-muted-foreground">→</span>
+                    <span class="font-medium">{{ tarif.garearrivee.libelle }}</span>
+                </span>
+                <span class="tabular-nums font-semibold">{{ tarif.montant|number_format(0, ',', ' ') }} FCFA</span>
+            </li>
+            {% else %}
+            <li class="text-sm text-muted-foreground">Aucun tarif défini.</li>
+            {% endfor %}
+        </ul>
+    </div>
+```
+
+## 14. Supprimer la gestion de la grille GLOBALE (si abandon de `Tarif`)
+
+- Fichiers à supprimer : `src/Controller/TarifController.php`, `src/Form/TarifFormType.php`,
+  `assets/react/controllers/Exploitation/TarifTable.tsx`, `assets/react/models/tarif.model.ts`,
+  `templates/tarif/{index,new,edit,_form}.html.twig`.
+- `templates/base.html.twig` : retirer le lien sidebar « Grille tarifaire » (`{% if is_granted('TARIF_VOIR') %}…`).
+
+---
+
+# VÉRIFICATIONS
+
+```bash
+# BK
+php -l src/Entity/TarifLigne.php
+php -l src/Repository/TarifLigneRepository.php
+php -l src/State/LigneProcessor.php
+php -l src/State/TicketProcessor.php
+php bin/console doctrine:schema:validate --skip-sync     # mapping OK
+php bin/console doctrine:mapping:info | grep TarifLigne  # [OK]
+
+# FT
+php bin/console lint:twig templates/ligne
+npm run dev    # 0 erreur (8 warnings CSS pré-existants)
+```
+
+Test fonctionnel : créer une ligne + sa grille → vendre un ticket sur un tronçon → le prix vient bien du
+`TarifLigne` de **cette** ligne.
+
+---
+
+# RÉFÉRENCES
+- Migration `tarif_ligne → tarif` (à inverser) : `BK-Transport/migrations/Version20260612120000.php`
+- Baseline contenant le schéma `tarif_ligne` d'origine : `BK-Transport/migrations/Version20260611213840.php`

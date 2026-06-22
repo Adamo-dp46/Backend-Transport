@@ -11,6 +11,7 @@ use App\Entity\Dto\AffectpersonnelInput;
 use App\Entity\User;
 use App\Entity\Voyage;
 use App\Repository\PersonnelRepository;
+use App\Security\VoyageGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -22,7 +23,8 @@ class AffectpersonnelProcessor implements ProcessorInterface
         private ProcessorInterface $processor,
         private Security $security,
         private PersonnelRepository $personnelRepository,
-        private EntityManagerInterface $em
+        private EntityManagerInterface $em,
+        private VoyageGuard $guard
     )
     {
     }
@@ -86,6 +88,13 @@ class AffectpersonnelProcessor implements ProcessorInterface
 
             if(!$voyage) {
                 throw new NotFoundHttpException('Voyage introuvable');
+            }
+
+            // Affectation interdite à la gare de destination
+            $this->guard->assertPeutGerer($user, $voyage);
+
+            if($voyage->getDatefin() !== null) {
+                throw new BadRequestHttpException('Ce voyage est clôturé : impossible d\'affecter du personnel');
             }
 
             foreach($voyage->getDetailpersonnels() as $dp) {

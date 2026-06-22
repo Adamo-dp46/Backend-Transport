@@ -58,7 +58,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'], // Pour piloter l'ordre
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Typepiece') or is_granted('ROLE_USER')", /*
+            security: "is_granted('VOIR', 'Typepiece') or is_granted('VOIR', 'Piece')", /*
                 - Pour le filtre du 'identreprise' on l'a fais dans 'EntrepriseScopeExtension'
                 - !! on pouvait le faire dans l'option 'provider' mais lui fais remplace totalement la récupération, aussi avec lui 'ApiPlatform' n'utilise plus automatiquement 'Doctrine' et donc les extensions ne seront plus appelées
                 - - 

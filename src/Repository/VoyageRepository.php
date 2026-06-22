@@ -4,7 +4,6 @@ namespace App\Repository;
 
 use App\Entity\Voyage;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
-use Doctrine\ORM\Tools\Pagination\Paginator;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -15,39 +14,6 @@ class VoyageRepository extends ServiceEntityRepository
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, Voyage::class);
-    }
-
-    public function findByTrajet(
-        int $trajetId,
-        int $identreprise,
-        int $page = 1,
-        int $itemsPerPage = 30,
-        ?\DateTimeImmutable $debut = null,
-        ?\DateTimeImmutable $fin = null
-    ): Paginator
-    {
-        $offset = ($page - 1) * $itemsPerPage;
-        $qb = $this->createQueryBuilder('v')
-            ->where('v.trajet = :trajet')
-            ->andWhere('v.identreprise = :identreprise')
-            ->andWhere('v.deletedAt IS NULL')
-            ->setParameter('trajet', $trajetId)
-            ->setParameter('identreprise', $identreprise)
-            ->orderBy('v.createdAt', 'DESC')
-            ->setFirstResult($offset)
-            ->setMaxResults($itemsPerPage);
-
-        if($debut) {
-            $qb->andWhere('v.datedebut >= :debut')->setParameter('debut', $debut);
-        }
-
-        if($fin) {
-            $qb->andWhere('v.datedebut <= :fin')->setParameter('fin', $fin);
-        }
-
-        return new Paginator($qb->getQuery()); /*
-            - Pour que 'ApiPlatform' puisse calculer le 'totalItems' correctement sans un count séparé
-        */
     }
 
     /* Statistiques
@@ -71,6 +37,25 @@ class VoyageRepository extends ServiceEntityRepository
             ->getSingleScalarResult();
     }
 
+    /** Capacité et nb de voyages par gare de DÉPART (ligne.gareorigine), voyages partant sur la période. */
+    public function capaciteParGareDepart(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('v')
+            ->select('go.id AS gareid, go.libelle AS garelibelle, COUNT(v.id) AS nbvoyages, COALESCE(SUM(v.placestotal), 0) AS capacite')
+            ->join('v.ligne', 'l')
+            ->join('l.gareorigine', 'go')
+            ->andWhere('v.identreprise = :ide')
+            ->andWhere('v.deletedAt IS NULL')
+            ->andWhere('v.datedebut >= :debut')
+            ->andWhere('v.datedebut <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('go.id')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
     public function countParJour(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
     {
         return $this->createQueryBuilder('v')
@@ -88,29 +73,14 @@ class VoyageRepository extends ServiceEntityRepository
             ->getArrayResult();
     }
 
-    /**
-     * Taux de remplissage moyen sur la période
-     * Retourne ['taux_moyen' => float]
-     */
-    public function tauxRemplissageMoyen(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): float
-    {
-        $row = $this->createQueryBuilder('v')
-            ->select('AVG(CASE WHEN v.placestotal > 0 THEN (v.placesoccupees * 100.0 / v.placestotal) ELSE 0 END) AS taux_moyen')
-            ->andWhere('v.identreprise = :ide')
-            ->andWhere('v.datedebut >= :debut')
-            ->andWhere('v.datedebut <= :fin')
-            ->andWhere('v.deletedAt IS NULL')
-            ->setParameter('ide', $identreprise)
-            ->setParameter('debut', $debut)
-            ->setParameter('fin', $fin)
-            ->getQuery()
-            ->getSingleResult();
-
-        return round((float)($row['taux_moyen'] ?? 0), 2);
-    }
+    // La moyenne globale du taux de remplissage est calculée en PHP dans 'ExploitationStatsProvider'
+    // (AVG des taux par voyage de 'tauxRemplissageParVoyage'), pas par une requête dédiée.
 
     /**
-     * Détail taux de remplissage par voyage sur la période
+     * Détail taux de remplissage par voyage sur la période.
+     * 'placesoccupees' = nombre de tickets ACTIFS (VALIDE, deletedAt IS NULL) compté à la volée
+     * (l'ancienne colonne stockée a été supprimée ; les billets désistés ne comptent pas).
+     * Le 'taux' est calculé côté provider.
      */
     public function tauxRemplissageParVoyage(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
     {
@@ -122,8 +92,7 @@ class VoyageRepository extends ServiceEntityRepository
                 'v.destination',
                 'v.datedebut',
                 'v.placestotal',
-                'v.placesoccupees',
-                'CASE WHEN v.placestotal > 0 THEN ROUND(v.placesoccupees * 100.0 / v.placestotal, 2) ELSE 0 END AS taux'
+                "(SELECT COUNT(t.id) FROM App\Entity\Ticket t WHERE t.voyage = v AND t.deletedAt IS NULL AND t.statut = 'VALIDE') AS placesoccupees"
             )
             ->andWhere('v.identreprise = :ide')
             ->andWhere('v.datedebut >= :debut')

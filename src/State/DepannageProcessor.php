@@ -133,9 +133,123 @@ class DepannageProcessor implements ProcessorInterface
             ->setUpdatedBy($userId);
 
         if(!empty($data->details)) {
-            foreach($depannage->getDetaildepannages() as $detail) { /*
-                - On annule les anciens mouvements
+            $this->reconcileDetails($depannage, $data->details, $entrepriseId, $userId); /*
+                - Réconciliation par différence : on ne touche au stock que pour ce qui change réellement
             */
+        }
+
+        return $this->processor->process($depannage, $operation, $uriVariables, $context);
+    }
+
+    /**
+     * Réconcilie les détails lors d'une modification (clé = la pièce) en ne
+     * générant QUE les mouvements de stock nécessaires (un dépannage = SORTIE) :
+     *  - pièce retirée      → ENTREE de sa quantité (on remet la pièce en stock)
+     *  - pièce ajoutée      → SORTIE de sa quantité
+     *  - quantité augmentée → SORTIE du surplus uniquement (on consomme plus)
+     *  - quantité diminuée  → ENTREE de la différence (on rend au stock)
+     *  - pièce inchangée    → AUCUN mouvement
+     * Les lignes conservées sont mises à jour en place (pas de suppression/recréation).
+     */
+    private function reconcileDetails(Depannage $depannage, $details, $entrepriseId, $userId): void
+    {
+        $ids = array_map(fn($d) => $d['piece'], $details);
+        if(count($ids) !== count(array_unique($ids))) {
+            throw new BadRequestHttpException('Une pièce est en doublon dans ce dépannage');
+        }
+
+        /** @var array<int, Detaildepannage> $existants */
+        $existants = [];
+        foreach($depannage->getDetaildepannages() as $detail) {
+            $existants[$detail->getPiece()->getId()] = $detail;
+        }
+
+        $piecesRecues = [];
+        $total = 0;
+
+        foreach($details as $detailInput) {
+            $pieceId = (int)$detailInput['piece'];
+            $piecesRecues[$pieceId] = true;
+
+            $quantite = (int)$detailInput['quantite'];
+            if($quantite <= 0) {
+                throw new BadRequestHttpException('Quantité invalide');
+            }
+
+            if(isset($existants[$pieceId])) { /*
+                - Pièce déjà présente : on n'ajuste que le delta de quantité
+            */
+                $detail = $existants[$pieceId];
+                $prixunitaire = (int)($detailInput['prixunitaire'] ?? $detail->getPrixunitaire());
+                if($prixunitaire <= 0) {
+                    throw new BadRequestHttpException('Prix unitaire invalide');
+                }
+                $delta = $quantite - $detail->getQuantite();
+                if($delta > 0) {
+                    $this->stockmouvementService->createMovement(
+                        $detail->getPiece(),
+                        Typemouvement::SORTIE->value,
+                        $delta,
+                        Referencetype::DEPANNAGE->value,
+                        $depannage->getId(),
+                        $entrepriseId,
+                        $userId
+                    );
+                } elseif($delta < 0) {
+                    $this->stockmouvementService->createMovement(
+                        $detail->getPiece(),
+                        Typemouvement::ENTREE->value,
+                        -$delta,
+                        Referencetype::DEPANNAGE->value,
+                        $depannage->getId(),
+                        $entrepriseId,
+                        $userId
+                    );
+                }
+                $detail
+                    ->setQuantite($quantite)
+                    ->setPrixunitaire($prixunitaire);
+            } else { /*
+                - Nouvelle pièce : sortie complète
+            */
+                $piece = $this->pieceRepository->findOneBy([
+                    'id' => $pieceId,
+                    'identreprise' => $entrepriseId,
+                    'deletedAt' => null
+                ]);
+                if(!$piece) {
+                    throw new NotFoundHttpException('Pièce invalide');
+                }
+                $prixunitaire = (int)($detailInput['prixunitaire'] ?? $piece->getPrixunitaire());
+                if($prixunitaire <= 0) {
+                    throw new BadRequestHttpException('Prix unitaire invalide');
+                }
+                $detail = new Detaildepannage();
+                $detail
+                    ->setPiece($piece)
+                    ->setQuantite($quantite)
+                    ->setDepannage($depannage)
+                    ->setPrixunitaire($prixunitaire);
+                $this->em->persist($detail);
+
+                $this->stockmouvementService->createMovement(
+                    $piece,
+                    Typemouvement::SORTIE->value,
+                    $quantite,
+                    Referencetype::DEPANNAGE->value,
+                    $depannage->getId(),
+                    $entrepriseId,
+                    $userId
+                );
+            }
+
+            $total += $prixunitaire * $quantite;
+        }
+
+        foreach($existants as $pieceId => $detail) { /*
+            - Pièces présentes avant mais absentes maintenant : on remet en stock
+        */
+            if(!isset($piecesRecues[$pieceId])) {
                 $this->stockmouvementService->createMovement(
                     $detail->getPiece(),
                     Typemouvement::ENTREE->value,
@@ -149,12 +263,10 @@ class DepannageProcessor implements ProcessorInterface
             }
         }
 
-        $this->handleDetails($depannage, $data->details, $entrepriseId, $userId);
-
-        return $this->processor->process($depannage, $operation, $uriVariables, $context);
+        $depannage->setCouttotal($total);
     }
 
-    private function handleDetails($depannage, $details, $entrepriseId, $userId)
+    private function handleDetails(Depannage $depannage, $details, $entrepriseId, $userId)
     {
         $ids = array_map(fn($d) => $d['piece'], $details);
         if(count($ids) !== count(array_unique($ids))) {
@@ -173,7 +285,7 @@ class DepannageProcessor implements ProcessorInterface
                 throw new NotFoundHttpException('Pièce invalide');
             }
 
-            $prixunitaire = $detailInput['prixunitaire'] ?? $piece->getPrixUnitaire();
+            $prixunitaire = $detailInput['prixunitaire'] ?? $piece->getPrixunitaire();
             $quantite = $detailInput['quantite'];
 
             if($quantite <= 0) { // Vu qu'on n'a de pas règle dessus
@@ -207,7 +319,7 @@ class DepannageProcessor implements ProcessorInterface
 
             $total += $prixunitaire * $quantite;
         }
-        $depannage->setCoutTotal($total);
+        $depannage->setCouttotal($total);
     }
 
     private function getCar(int $carId, int $entrepriseId)

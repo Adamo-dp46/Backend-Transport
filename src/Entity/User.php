@@ -39,6 +39,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use App\Entity\Interface\GareOwnedInterface;
 use Vich\UploaderBundle\Mapping\Attribute\Uploadable;
 use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
 
@@ -89,7 +90,7 @@ use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
             )
         ),
         new Post(
-            security: "is_granted('CREER', object)",
+            security: "is_granted('CREER', 'User')",
             processor: UserProcessor::class,
             openapi: new Operation(
                 summary: 'Créer un utilisateur',
@@ -162,6 +163,10 @@ use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
         new Patch(
             security: "is_granted('ROLE_USER')",
             uriTemplate: '/me',
+            provider: MeProvider::class, /*
+                - Sans provider ni {id} dans l'URI, API Platform ne sait pas quel objet patcher (404).
+                  MeProvider fournit l'utilisateur courant comme objet à mettre à jour.
+            */
             denormalizationContext: ['groups' => ['write:User:profil']],
             processor: UserProfileProcessor::class,
             openapi: new Operation(
@@ -239,7 +244,8 @@ use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
 #[ApiFilter(SearchFilter::class, properties: [
     'nom' => 'partial',
     'email' => 'partial',
-    'statut' => 'exact'
+    'statut' => 'exact',
+    'gare.id' => 'exact'
 ])]
 #[ApiFilter(OrderFilter::class, properties: [
     'id',
@@ -247,8 +253,13 @@ use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
     'prenom'
 ])]
 #[Uploadable()]
-class User implements UserInterface, PasswordAuthenticatedUserInterface /*, JWTUserInterface */
+class User implements UserInterface, PasswordAuthenticatedUserInterface, GareOwnedInterface /*, JWTUserInterface */
 {
+    public static function gareScopeField(): string
+    {
+        return 'gare';
+    }
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]

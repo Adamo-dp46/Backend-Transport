@@ -5,21 +5,21 @@ namespace App\State;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\State\ProviderInterface;
 use App\Domain\Trait\PeriodeTrait;
-use App\Entity\Output\Trajet\TrajetPerformanceDto;
-use App\Entity\Output\Trajet\TrajetStatistiqueOutput;
+use App\Entity\Output\Ligne\LignePerformanceDto;
+use App\Entity\Output\Ligne\LigneStatistiqueOutput;
 use App\Entity\User;
-use App\Repository\TrajetRepository;
+use App\Repository\LigneRepository;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
 
-class TrajetStatsProvider implements ProviderInterface
+class LigneStatsProvider implements ProviderInterface
 {
     use PeriodeTrait;
 
     public function __construct(
         private Security $security,
         private RequestStack $requestStack,
-        private TrajetRepository $trajetRepository
+        private LigneRepository $ligneRepository
     )
     {
     }
@@ -35,20 +35,19 @@ class TrajetStatsProvider implements ProviderInterface
         [$dateDebut, $dateFin] = $this->parsePeriode($request);
 
         $performances = array_map(
-            fn($row) => new TrajetPerformanceDto(
+            fn($row) => new LignePerformanceDto(
                 id: $row['id'],
-                provenance: $row['provenance'],
-                destination: $row['destination'],
-                codetrajet: $row['codetrajet'],
-                nbvoyages: (int)$row['nbvoyages'],
-                nbtickets: (int)$row['nbtickets'],
-                recette: round((float)$row['recette'], 2),
+                libelle: $row['libelle'],
+                codeligne: $row['codeligne'],
+                nbvoyages: (int) $row['nbvoyages'],
+                nbtickets: (int) $row['nbtickets'],
+                recette: round((float) $row['recette'], 2),
             ),
-            $this->trajetRepository->findAllAvecStats($dateDebut, $dateFin, $identreprise)
+            $this->ligneRepository->findAllAvecStats($dateDebut, $dateFin, $identreprise)
         );
 
-        return new TrajetStatistiqueOutput(
-            totalTrajets: $this->trajetRepository->countTotal($identreprise),
+        return new LigneStatistiqueOutput(
+            totalLignes: $this->ligneRepository->countTotal($identreprise),
             performances: $performances,
         );
     }

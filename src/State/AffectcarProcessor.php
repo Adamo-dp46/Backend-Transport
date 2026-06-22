@@ -8,6 +8,7 @@ use App\Domain\Service\CarStatutService;
 use App\Entity\Dto\AffectcarInput;
 use App\Entity\User;
 use App\Entity\Voyage;
+use App\Security\VoyageGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -18,7 +19,8 @@ class AffectcarProcessor implements ProcessorInterface
         private ProcessorInterface $processor,
         private Security $security,
         private EntityManagerInterface $em,
-        private CarStatutService $carStatutService
+        private CarStatutService $carStatutService,
+        private VoyageGuard $guard
     )
     {
     }
@@ -41,6 +43,13 @@ class AffectcarProcessor implements ProcessorInterface
 
         if(!$voyage) {
             throw new BadRequestHttpException('Voyage introuvable');
+        }
+
+        // Préparation interdite à la gare de destination
+        $this->guard->assertPeutGerer($user, $voyage);
+
+        if($voyage->getDatefin() !== null) {
+            throw new BadRequestHttpException('Ce voyage est clôturé : impossible d\'affecter un véhicule');
         }
 
         if($voyage->getCar()) {

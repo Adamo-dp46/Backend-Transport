@@ -15,7 +15,9 @@ final class CaisseOutput
         /** @var CaisseParAgentDto[] */
         public readonly array $parAgent,
         /** @var CaisseParJourDto[] */
-        public readonly array $parJour
+        public readonly array $parJour,
+        /** @var CaisseParGareDto[] */
+        public readonly array $parGare = []
     )
     {
     }

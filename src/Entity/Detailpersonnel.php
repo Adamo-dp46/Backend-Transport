@@ -20,7 +20,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new Delete(
-            // security: "is_granted('SUPPRIMER', object)",
+            security: "is_granted('MODIFIER', 'Personnel')",
             requirements: ['id' => '\d+'],
             processor: SoftDeleteProcessor::class,
             openapi: new Operation(
@@ -57,7 +57,7 @@ class Detailpersonnel
     #[ORM\ManyToOne(inversedBy: 'detailpersonnels')] // '#[ORM\JoinColumn(nullable: true, onDelete: "SET NULL")]' fait automatiquement
     private ?Depannage $depannage = null;
 
-    #[ORM\ManyToOne(inversedBy: 'detailPersonnels')] // !!
+    #[ORM\ManyToOne(inversedBy: 'detailpersonnels')]
     private ?Voyage $voyage = null;
 
     public function getId(): ?int

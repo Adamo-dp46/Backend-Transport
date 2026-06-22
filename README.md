@@ -18,12 +18,19 @@
         > Sol 2 : !! met une `ApiResource` avec l'endpoint `GetCollection` sur `Detailpersonnel`, on applique les filtres `personnel.id`, `voyage.id` et `depannage.id` et pour ne charger que les `detailpersonnels` liés à un voyage sans les dépannages on ajoute `ExistsFilter` sur `'voyage', 'depannage'` puis dans la requête du voyage on met `'exists[voyage]': 'true'` et pour dépannage `'exists[depannage]': 'true'`
         > Sol 3 : !! peut créer un provider personnalisé qui fais la requêtes en faisant un join et prendre en compte la pagination, filtre, tri..
     > !! éviter d'avoir une erreur à cause des données que j'envoi au select comme `typepiece`, `marquepiece`.. lorsqu'on donne la permission à utilisateur de voir les `piece` par ex et qu'il accède à la page de listing des pièces, on a `or is_granted('ROLE_USER')` sur le `getCollection` des entités ou.. créer un endpoint pour les select
+    > !! un bypass `ROLE_ADMIN_GARE` pour éviter de lui donner des rôles manuellement et on.. son périmètre via les extensions et processors
 
 - **Les modules**
+    > Périmètre des données par gare (via `GareScopeExtension`, actif pour un agent rattaché à une gare et non-admin ; les admins entreprise/super et les utilisateurs centraux sans gare voient tout)
+        > Données entreprise (toutes les gares) : Gare, Ligne, Tarifs, Car, Personnel, Dépannage, stock, référentiels
+        > Données partagées le long d'une ligne : Voyage (dont la ligne dessert sa gare), Ticket (idem via le voyage), Courrier & Bagage (gare de départ OU d'arrivée = sa gare)
+        > Données propres à la gare : les utilisateurs de sa gare
+
     > Le module `Administration` : Entreprise, User, Role, Permission, UserRole
         > Gestion des comptes utilisateurs et de l'entreprise
         > Gestion et attribution des rôles
         > Gestion des permissions RBAC
+        > Hiérarchie de gestion des comptes (via `UserManagementGuard`) : nul ne se gère soi-même (profil dédié) ; fondateur & admins entreprise gérés uniquement par le super admin ; un agent rattaché à une gare ne gère que les utilisateurs simples de SA gare (jamais un admin de gare) ; un utilisateur central sans gare gère tout le monde sauf les admins
 
     > Le module `Personnel` ou `RH` : Typepersonnel, Personnel, Detailpersonnel
         > Gestion des employés de la compagnie
@@ -47,29 +54,37 @@
         > Affecter un personnel à un détail dépannage ex: mécaniciens
         > Historique des maintenances par véhicule
 
-    > Le module `Exploitation` : Gare, Tarif, Trajet, Voyage
-        > Gestion des gares, tarifs
-        > Créer un Trajet et définir son tarif
-        > Gestion du voyage
+    > Le module `Exploitation` : Gare, Ligne, Arret, Tarif, Voyage
+        > Gestion des gares
+        > Une `Ligne` est un itinéraire ordonné d'arrêts (`Arret` = Gare + ordre) : 1er arrêt = origine, dernier = terminus, les autres sont intermédiaires. (Remplace l'ancien `Trajet`)
+        > La grille `Tarif` est GLOBALE par entreprise : un prix par couple de gares (garedepart → garearrivee), saisi une seule fois et partagé par toutes les lignes, avec création automatique du sens inverse au même montant. (Remplace l'ancien tarif par ligne `TarifLigne`)
+        > Un `Voyage` est une instance d'une `Ligne` à une date donnée (provenance/destination dérivées de la ligne)
             > Affecter un car disponible et du personnel via détail personnel à un voyage
             > Gérer horaires de départ et d'arrivée
+        > Droits par position de gare sur le voyage (via `VoyageGuard`)
+            > Préparation (créer, modifier, affecter car/personnel, supprimer) : toute gare SAUF la destination, ou un admin
+            > Clôture : uniquement la gare de DESTINATION (terminus) ou un admin ; un voyage clôturé n'est plus modifiable ni affectable
+            > Réception `/voyages/{id}/receptionner` : uniquement une gare INTERMÉDIAIRE (ni provenance ni terminus) ; bascule automatiquement les courriers (`EN_TRANSIT → RECEPTIONNE`) et bagages (`EMBARQUE → LIVRE`) qui y descendent
         > Suivi du statut voyage
-        > Historique complet pour reporting ou voyages par trajet et véhicule
+        > Historique complet pour reporting ou voyages par ligne et véhicule
         > Impression de bordereau qui est un document qui résume toutes les ventes de tickets d'un voyage dans une gare donnée, donc on a `Ticket` ManyToOne `Gare`
             > Le bordereau de gare qui est un document filtré par gare d'émission et liste les tickets vendus depuis une gare spécifique pour un voyage destiné au chef de gare qui fait le bilan de sa caisse..
             > !! chauffeur qui est un document global pour le voyage entier, sans filtre de gare et liste tout ce que le chauffeur transporte comme tous les tickets, tous les courriers embarqués sur et tous les bagages embarqués sur ce voyage remis à la gare d'arrivée
         > Si on peut annuler un voyage alors le car devient disponile et les places remboursées
 
     > Le module `Billetterie` : Ticket
-        > Gestion et émission des tickets pour un voyage
-        > Calcul automatique du montant via le tarif
+        > Émission des tickets PAR TRONÇON : un ticket a une gare de montée (`gare`) et une gare de descente (`garedescente`), toutes deux arrêts de la ligne du voyage (descente après montée)
+        > Calcul automatique du montant via la grille `Tarif` GLOBALE (montée → descente)
+        > La gare de montée est FORCÉE à la gare de l'agent (un agent ne vend qu'au départ de sa gare) ; la gare de destination (terminus) ne peut pas vendre
+        > Capacité PAR TRONÇON : un même siège peut être revendu sur des tronçons disjoints d'un voyage, avec priorité à la gare AMONT (une vente d'une gare en aval ne grise/bloque pas l'amont)
         > Suivi du nombre de places vendues et de la recette par voyage
-        > Si on peut annuler un ticket on décrémente les places occupées du voyage
+        > Si on annule un ticket on décrémente les places occupées du voyage
 
     > Le module `Courrier` : Tarifcourrier, Courrier, Detailcourrier
         > Pour calculer la taxe d'un colis `Detailcourrier` on se base sur valeur, à la création on cherche le `TarifCourrier` dont `valeur_min <= valeur <= valeur_max` et on affecte son `montanttaxe` ou `montant` du colis
+        > Gares & voyage : si un voyage est affecté, `garedepart`/`garearrivee` doivent être des arrêts de SA ligne (départ avant arrivée) et la gare de départ est forcée à la gare de l'agent. Sans voyage, le courrier reste `EN_ATTENTE` (gares nulles, affectées plus tard)
         > On a géré le tarif des colis via un système de `grille tarifaire` ou tranches `10 001 - 50 000 FCFA → taxe fixe 3 000` et on peut le faire aussi avec le poids du colis `k`
-        > !! que le `statut` du courrier suit automatiquement le voyage on a `VoyageClotureSatutSubscriber` qui gère la transition `EN_TRANSIT → RECEPTIONNE` qui correspond à l'accusé de réception à la gare d'arrivée qui confirme l'arrivée des colis
+        > !! que le `statut` du courrier suit automatiquement le voyage on a `VoyageClotureStautSubscriber` qui gère la transition `EN_TRANSIT → RECEPTIONNE` qui correspond à l'accusé de réception à la gare d'arrivée qui confirme l'arrivée des colis
         > !! la transition du statut `RECEPTIONNE → LIVRE` qui correspond à la remise au destinataire avec potentiellement un paiement, c'est l'agent de la gare d'arrivée qui confirme la remise au destinataire via l'endpoint `../livrer`
         > !! le paiement de la taxe on a 2 types, à l'envoi ou à la reception du courrier
         > La recette totale du courrier se base sur le mode de paiement
@@ -79,7 +94,8 @@
             > Le modèle `A` déclaration à l'achat qui permet au client de déclarer ses bagages en achetant son ticket de voyage. Le prix est calculé et inclus immédiatement
             > !! `B` facturation au chargement qui au chargement du car les bagages du client sont pesés physiquement et un ticket de pesée séparé est émis qui est un reçu distinct du ticket de voyage qui documente le poids, la nature et le coût des bagages.. et lie le bagage au client
         > Le tarif du bagage est basée sur le poids
-        > Pour gérer l'automatisation du statut du bagage on a `VoyageClotureSatutSubscriber` qui écoute les changements sur `Voyage` et va causer un soucis si on a clôturé le voyage avant de déclarer que le bagage est perdu
+        > Gares & voyage : le bagage circule sur un voyage ; sa gare de descente (`garedescente`) est un arrêt de la ligne, après sa gare d'origine (`garedepart`, forcée à la gare de l'agent). La livraison (`EMBARQUE → LIVRE`) se fait quand la gare intermédiaire de descente réceptionne le voyage, ou à la clôture au terminus
+        > Pour gérer l'automatisation du statut du bagage on a `VoyageClotureStautSubscriber` qui écoute les changements sur `Voyage` et va causer un soucis si on a clôturé le voyage avant de déclarer que le bagage est perdu
         > La recette totale du bagage se base sur le moment ou le bagage est embarqué
 
     > Le module `Tableau de bord` & `Rapports`
@@ -101,15 +117,13 @@
             > Coût de maintenance par véhicule
 
 - **Git**
-    > git remote add origin git@github.com:Damo-dp45/Backend-Transport.git
-    > git branch -M main
     > git push -u origin main
 
 - **Production**
     > On peut désactiver la doc `ApiPlatform` dans `config/packages/api_platform.yaml`
     > On décomente la contrainte de l'url dans `ForgotPasswordInput`
     > La 1ère
-        > git clone https://github.com/Damo-dp45/Backend-Transport.git .
+        > git clone .. .
         > Pour le `.env..` on peut `cp .env .env.local` ou `composer dump-env prod` qui génère un fichier `.env.local.php` qui est plus optimisé
         > composer install --no-dev --optimize-autoloader
         > composer require symfony/apache-pack

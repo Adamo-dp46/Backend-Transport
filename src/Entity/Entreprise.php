@@ -57,7 +57,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
          */
         new Get(
             uriTemplate: '/me/entreprise',
-            security: "is_granted('ROLE_ADMIN') or object == user.getEntreprise()", // 'user' désigne l'utilisateur authentifié
+            security: "is_granted('ROLE_ADMIN') or object == user.getEntreprise()",
             provider: MeEntrepriseProvider::class,
             input: false,
             openapi: new Operation(

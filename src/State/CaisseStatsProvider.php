@@ -8,6 +8,7 @@ use App\Domain\Trait\PeriodeTrait;
 use App\Entity\Output\Caisse\CaisseDetailVoyageDto;
 use App\Entity\Output\Caisse\CaisseOutput;
 use App\Entity\Output\Caisse\CaisseParAgentDto;
+use App\Entity\Output\Caisse\CaisseParGareDto;
 use App\Entity\Output\Caisse\CaisseParJourDto;
 use App\Entity\User;
 use App\Repository\BagageRepository;
@@ -167,6 +168,48 @@ class CaisseStatsProvider implements ProviderInterface
             detailParVoyage:  $j['detail'] ?? [],
         ), array_keys($joursMap), array_values($joursMap));
 
+        // ── Par gare (multi-gares) ───────────────────────────────
+        $rawGareTickets   = $this->ticketRepository->recetteParGare($dateDebut, $dateFin, $identreprise);
+        $rawGareCourriers = $this->courrierRepository->recetteParGare($dateDebut, $dateFin, $identreprise);
+        $rawGareBagages   = $this->bagageRepository->recetteParGare($dateDebut, $dateFin, $identreprise);
+
+        $garesMap = [];
+        foreach ($rawGareTickets as $row) {
+            $id = $row['gareid'];
+            $garesMap[$id]['gareId']         = $id;
+            $garesMap[$id]['gareLibelle']    = $row['garelibelle'];
+            $garesMap[$id]['nbtickets']      = (int)$row['nbtickets'];
+            $garesMap[$id]['recetteTickets'] = (float)$row['recette'];
+        }
+        foreach ($rawGareCourriers as $row) {
+            $id = $row['gareid'];
+            $garesMap[$id]['gareId']           = $id;
+            $garesMap[$id]['gareLibelle']      = $garesMap[$id]['gareLibelle'] ?? $row['garelibelle'];
+            $garesMap[$id]['nbcourriers']      = (int)$row['nbcourriers'];
+            $garesMap[$id]['recetteCourriers'] = (float)$row['recette'];
+        }
+        foreach ($rawGareBagages as $row) {
+            $id = $row['gareid'];
+            $garesMap[$id]['gareId']         = $id;
+            $garesMap[$id]['gareLibelle']    = $garesMap[$id]['gareLibelle'] ?? $row['garelibelle'];
+            $garesMap[$id]['nbbagages']      = (int)$row['nbbagages'];
+            $garesMap[$id]['recetteBagages'] = (float)$row['recette'];
+        }
+
+        $parGare = array_map(fn($g) => new CaisseParGareDto(
+            gareId:           $g['gareId'],
+            gareLibelle:      $g['gareLibelle'],
+            nbtickets:        $g['nbtickets'] ?? 0,
+            recetteTickets:   round($g['recetteTickets'] ?? 0, 2),
+            nbcourriers:      $g['nbcourriers'] ?? 0,
+            recetteCourriers: round($g['recetteCourriers'] ?? 0, 2),
+            nbbagages:        $g['nbbagages'] ?? 0,
+            recetteBagages:   round($g['recetteBagages'] ?? 0, 2),
+            recetteTotale:    round(($g['recetteTickets'] ?? 0) + ($g['recetteCourriers'] ?? 0) + ($g['recetteBagages'] ?? 0), 2),
+        ), array_values($garesMap));
+
+        usort($parGare, fn($a, $b) => $b->recetteTotale <=> $a->recetteTotale);
+
         $totalCourriers = array_sum(array_column(array_values($couriersParAgent), 'nbcourriers'));
         $totalBagages = array_sum(array_column(array_values($bagagesParAgent), 'nbbagages'));
 
@@ -179,7 +222,8 @@ class CaisseStatsProvider implements ProviderInterface
             recetteBagages:   $recetteBagages,
             recetteTotale:    $recetteTickets + $recetteCourriers + $recetteBagages,
             parAgent:         $parAgent,
-            parJour: $parJour
+            parJour:          $parJour,
+            parGare:          $parGare
         );
     }
 }

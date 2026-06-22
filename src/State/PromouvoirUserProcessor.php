@@ -54,6 +54,10 @@ class PromouvoirUserProcessor implements ProcessorInterface
                 - On rétrograde pour rétirer le rôle d'administrateur
             */
         } else {
+            // Un administrateur d'entreprise gère toute l'entreprise : il ne doit pas être rattaché à une gare
+            if($data->getGare() !== null) {
+                throw new BadRequestHttpException('Cet utilisateur est lié à une gare. Retirez sa gare avant de le promouvoir en administrateur d\'entreprise.');
+            }
             $roles[] = 'ROLE_ADMIN';
         }
         $data->setRoles($roles); /*

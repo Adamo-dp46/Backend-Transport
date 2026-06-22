@@ -19,9 +19,9 @@ class Detailapprovisionnement
     #[Groups(['read:Approvisionnement'])]
     private ?int $quantite = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2)]
+    #[ORM\Column]
     #[Groups(['read:Approvisionnement'])]
-    private ?string $prixunitaire = null; // Vu que le prix d'une pièce change dans le temps
+    private ?int $prixunitaire = null; // Vu que le prix d'une pièce change dans le temps
 
     #[ORM\ManyToOne(inversedBy: 'detailapprovisionnements', cascade: ['persist'])]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')] // --
@@ -32,7 +32,7 @@ class Detailapprovisionnement
     #[Groups(['read:Approvisionnement'])]
     private ?Piece $piece = null;
 
-    #[ORM\Column(nullable: true)]
+    #[ORM\Column(type: 'bigint', nullable: true)] // BIGINT : un total (prix × quantité) peut dépasser la limite INT (~2,1 milliards) en FCFA
     #[Groups(['read:Approvisionnement'])]
     private ?int $couttotal = null;
 
@@ -53,12 +53,12 @@ class Detailapprovisionnement
         return $this;
     }
 
-    public function getPrixunitaire(): ?string
+    public function getPrixunitaire(): ?int
     {
         return $this->prixunitaire;
     }
 
-    public function setPrixunitaire(string $prixunitaire): static
+    public function setPrixunitaire(int $prixunitaire): static
     {
         $this->prixunitaire = $prixunitaire;
 

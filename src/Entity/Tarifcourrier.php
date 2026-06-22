@@ -31,7 +31,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['valeurmin' => 'ASC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Tarifcourrier') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Tarifcourrier') or is_granted('VOIR', 'Courrier')",
             openapi: new Operation(
                 summary: 'Liste des tarifs courrier',
                 description: 'Permet de voir la liste des tarifs courrier',

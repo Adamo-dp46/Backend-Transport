@@ -17,24 +17,32 @@ class CourrierRepository extends ServiceEntityRepository
     }
 
     /* Statistiques
+     * Pilotées par le STATUT métier (et non par 'deletedAt') : la corbeille ne gère que la visibilité
+     * dans les listes, pas l'historique comptable. Un courrier ANNULE ne compte jamais dans la recette
+     * (les volets « réception » exigent déjà LIVRE, qui exclut de fait ANNULE).
      */
     public function recettesTotales(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): float
     {
         $row = $this->createQueryBuilder('c')
             ->select('COALESCE(SUM(c.montant), 0) AS total')
             ->andWhere('c.identreprise = :ide')
-            ->andWhere('c.deletedAt IS NULL')
+            ->andWhere("c.statut != 'ANNULE'")
+            // Paiement à l'envoi dans ce déploiement : recette comptabilisée à la création.
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            /* -- 'modepaiement' (paiement à l'envoi OU à la réception) — désactivé :
             ->andWhere('(
                 (c.modepaiement = :envoi AND c.createdAt >= :debut AND c.createdAt <= :fin)
                 OR
                 (c.modepaiement = :reception AND c.statut = :livre AND c.datepaiement >= :debut AND c.datepaiement <= :fin)
             )')
-            ->setParameter('ide', $identreprise)
-            ->setParameter('debut', $debut)
-            ->setParameter('fin', $fin)
             ->setParameter('envoi', 'ENVOI')
             ->setParameter('reception', 'RECEPTION')
             ->setParameter('livre', 'LIVRE')
+            */
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
             ->getQuery()
             ->getSingleResult();
 
@@ -47,21 +55,23 @@ class CourrierRepository extends ServiceEntityRepository
         int $identreprise
     ): array
     {
+        // Paiement à l'envoi : recette par agent comptabilisée à la création (createdBy).
         $envois = $this->createQueryBuilder('c')
             ->select('c.createdBy AS agentid, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
             ->andWhere('c.identreprise = :ide')
-            ->andWhere('c.modepaiement = :envoi')
+            // ->andWhere('c.modepaiement = :envoi') -- modepaiement désactivé (paiement à l'envoi)
             ->andWhere('c.createdAt >= :debut')
             ->andWhere('c.createdAt <= :fin')
-            ->andWhere('c.deletedAt IS NULL')
+            ->andWhere("c.statut != 'ANNULE'")
             ->setParameter('ide', $identreprise)
-            ->setParameter('envoi', 'ENVOI')
+            // ->setParameter('envoi', 'ENVOI')
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
             ->groupBy('c.createdBy')
             ->getQuery()
             ->getArrayResult();
 
+        /* -- Volet 'réception' (paiement à la livraison) — désactivé (paiement à l'envoi) :
         $receptions = $this->createQueryBuilder('c')
             ->select('c.updatedBy AS agentid, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
             ->andWhere('c.identreprise = :ide')
@@ -69,7 +79,6 @@ class CourrierRepository extends ServiceEntityRepository
             ->andWhere('c.statut = :livre')
             ->andWhere('c.datepaiement >= :debut')
             ->andWhere('c.datepaiement <= :fin')
-            ->andWhere('c.deletedAt IS NULL')
             ->setParameter('ide', $identreprise)
             ->setParameter('reception', 'RECEPTION')
             ->setParameter('livre', 'LIVRE')
@@ -78,6 +87,7 @@ class CourrierRepository extends ServiceEntityRepository
             ->groupBy('c.updatedBy')
             ->getQuery()
             ->getArrayResult();
+        */
 
         $index = [];
         foreach ($envois as $row) {
@@ -86,12 +96,14 @@ class CourrierRepository extends ServiceEntityRepository
             $index[$id]['nbcourriers'] = (int)$row['nbcourriers'];
             $index[$id]['montant']     = (float)$row['montant'];
         }
+        /* -- Fusion du volet réception — désactivée :
         foreach ($receptions as $row) {
             $id = $row['agentid'];
             $index[$id]['agentid']     = $id;
             $index[$id]['nbcourriers'] = ($index[$id]['nbcourriers'] ?? 0) + (int)$row['nbcourriers'];
             $index[$id]['montant']     = ($index[$id]['montant'] ?? 0) + (float)$row['montant'];
         }
+        */
 
         return array_values($index);
     }
@@ -102,15 +114,16 @@ class CourrierRepository extends ServiceEntityRepository
         int $identreprise
     ): array
     {
+        // Paiement à l'envoi : recette par jour comptabilisée à la création.
         $envois = $this->createQueryBuilder('c')
             ->select('DATE(c.createdAt) AS label, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
             ->andWhere('c.identreprise = :ide')
-            ->andWhere('c.modepaiement = :envoi')
+            // ->andWhere('c.modepaiement = :envoi') -- modepaiement désactivé (paiement à l'envoi)
             ->andWhere('c.createdAt >= :debut')
             ->andWhere('c.createdAt <= :fin')
-            ->andWhere('c.deletedAt IS NULL')
+            ->andWhere("c.statut != 'ANNULE'")
             ->setParameter('ide', $identreprise)
-            ->setParameter('envoi', 'ENVOI')
+            // ->setParameter('envoi', 'ENVOI')
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
             ->groupBy('label')
@@ -119,6 +132,7 @@ class CourrierRepository extends ServiceEntityRepository
         ; /*
             - La recette comptabilisé à la création
         */
+        /* -- Volet 'réception' (paiement à la livraison) — désactivé (paiement à l'envoi) :
         $receptions = $this->createQueryBuilder('c')
             ->select('DATE(c.datepaiement) AS label, COALESCE(SUM(c.montant), 0) AS montant, COUNT(c.id) AS nbcourriers')
             ->andWhere('c.identreprise = :ide')
@@ -126,7 +140,6 @@ class CourrierRepository extends ServiceEntityRepository
             ->andWhere('c.statut = :livre')
             ->andWhere('c.datepaiement >= :debut')
             ->andWhere('c.datepaiement <= :fin')
-            ->andWhere('c.deletedAt IS NULL')
             ->setParameter('ide', $identreprise)
             ->setParameter('reception', 'RECEPTION')
             ->setParameter('livre', 'LIVRE')
@@ -135,18 +148,19 @@ class CourrierRepository extends ServiceEntityRepository
             ->groupBy('label')
             ->getQuery()
             ->getArrayResult()
-        ; /*
-            - La recette comptabilisé à la livraison
+        ;
         */
         $index = [];
         foreach($envois as $row) {
             $index[$row['label']]['montant'] = (float)$row['montant'];
             $index[$row['label']]['nbcourriers'] = (int)$row['nbcourriers'];
         }
+        /* -- Fusion du volet réception — désactivée :
         foreach($receptions as $row) {
             $index[$row['label']]['montant'] = ($index[$row['label']]['montant'] ?? 0) + (float)$row['montant'];
             $index[$row['label']]['nbcourriers'] = ($index[$row['label']]['nbcourriers'] ?? 0) + (int)$row['nbcourriers'];
         }
+        */
         ksort($index); /*
             - La fusion par jour
         */
@@ -170,7 +184,6 @@ class CourrierRepository extends ServiceEntityRepository
             ->andWhere('c.identreprise = :ide')
             ->andWhere('c.createdAt >= :debut')
             ->andWhere('c.createdAt <= :fin')
-            ->andWhere('c.deletedAt IS NULL')
             ->setParameter('ide', $identreprise)
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
@@ -202,7 +215,7 @@ class CourrierRepository extends ServiceEntityRepository
             ->andWhere('c.identreprise = :ide')
             ->andWhere('c.createdAt >= :debut')
             ->andWhere('c.createdAt <= :fin')
-            ->andWhere('c.deletedAt IS NULL')
+            ->andWhere("c.statut != 'ANNULE'")
             ->setParameter('ide', $identreprise)
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
@@ -211,6 +224,118 @@ class CourrierRepository extends ServiceEntityRepository
             ->getQuery()
             ->getArrayResult()
         ;
+    }
+
+    /**
+     * Recette courrier groupée par gare de DÉPART (gare d'émission). Paiement à l'envoi : compté à la création.
+     * Les courriers sans gare de départ (EN_ATTENTE, non affectés) sont exclus (jointure interne).
+     */
+    public function recetteParGare(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('c')
+            ->select('g.id AS gareid, g.libelle AS garelibelle, COUNT(c.id) AS nbcourriers, COALESCE(SUM(c.montant), 0) AS recette')
+            ->join('c.garedepart', 'g')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere("c.statut != 'ANNULE'")
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Recette courriers par gare (dépôt) ET par jour — séries temporelles / sparklines. */
+    public function recetteParGareEtJour(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('c')
+            ->select('g.id AS gareid, DATE(c.createdAt) AS jour, COALESCE(SUM(c.montant), 0) AS recette')
+            ->join('c.garedepart', 'g')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere("c.statut != 'ANNULE'")
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->addGroupBy('jour')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Recette courriers par gare (dépôt) ET par agent (createdBy) — croisement caisse. */
+    public function recetteParGareEtAgent(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('c')
+            ->select('g.id AS gareid, c.createdBy AS agentid, COUNT(c.id) AS nb, COALESCE(SUM(c.montant), 0) AS recette')
+            ->join('c.garedepart', 'g')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere("c.statut != 'ANNULE'")
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->addGroupBy('c.createdBy')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Courriers reçus par gare (à destination = garearrivee), hors annulés. */
+    public function recusParGare(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('c')
+            ->select('g.id AS gareid, g.libelle AS garelibelle, COUNT(c.id) AS nb')
+            ->join('c.garearrivee', 'g')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere("c.statut != 'ANNULE'")
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Courriers en attente de récupération par gare (statut RECEPTIONNE, à destination). */
+    public function enAttenteParGare(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('c')
+            ->select('g.id AS gareid, g.libelle AS garelibelle, COUNT(c.id) AS nb')
+            ->join('c.garearrivee', 'g')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere("c.statut = 'RECEPTIONNE'")
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('g.id')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /** Courriers LIVRE : createdAt + datelivraison (date réelle de remise) pour le délai moyen exact. */
+    public function livresPourDelai(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('c')
+            ->select('c.createdAt AS createdAt, c.datelivraison AS datelivraison')
+            ->andWhere('c.identreprise = :ide')
+            ->andWhere("c.statut = 'LIVRE'")
+            ->andWhere('c.datelivraison IS NOT NULL')
+            ->andWhere('c.createdAt >= :debut')
+            ->andWhere('c.createdAt <= :fin')
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->getQuery()
+            ->getArrayResult();
     }
 
     /* Bordereau chauffeur

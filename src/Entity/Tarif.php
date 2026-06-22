@@ -2,6 +2,9 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Doctrine\Orm\Filter\OrderFilter;
+use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
@@ -11,19 +14,22 @@ use ApiPlatform\OpenApi\Model\Operation;
 use App\Entity\Interface\EntrepriseOwnedInterface;
 use App\Entity\Interface\HasSoftDeleteGuard;
 use App\Repository\TarifRepository;
-use App\State\EntrepriseInjectionProcessor;
 use App\State\SoftDeleteProcessor;
+use App\State\TarifProcessor;
 use App\State\UpdatedbyProcessor;
 use App\Validator\UniquePerEntreprise;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Validator\Constraints as Assert;
 
+/**
+ * Grille tarifaire GLOBALE : un prix unique par couple de gares (garedepart → garearrivee) pour l'entreprise.
+ * Le prix d'un segment (ex. Abidjan → Bouaké) est défini UNE fois et réutilisé par toutes les lignes qui le desservent.
+ */
 #[ORM\Entity(repositoryClass: TarifRepository::class)]
 #[UniquePerEntreprise(
-    fields: ['montant', 'libelle'],
-    message: 'Le tarif existe déjà pour votre entreprise'
+    fields: ['garedepart', 'garearrivee'],
+    message: 'Un tarif existe déjà pour ce couple de gares'
 )]
 #[ApiResource(
     security: "is_granted('IS_AUTHENTICATED_FULLY')",
@@ -35,26 +41,24 @@ use Symfony\Component\Serializer\Attribute\Groups;
         new GetCollection(
             security: "is_granted('VOIR', 'Tarif') or is_granted('ROLE_USER')",
             openapi: new Operation(
-                summary: 'Liste des tarifs',
-                description: 'Permet de voir la liste des tarifs',
+                summary: 'La grille tarifaire',
+                description: 'Permet de voir la grille tarifaire (prix gare → gare)',
                 security: [['bearerAuth' => []]]
             )
         ),
         new Get(
-            security: "is_granted('VOIR', object)",
+            security: "is_granted('VOIR', object) or is_granted('ROLE_USER')",
             requirements: ['id' => '\d+'],
             openapi: new Operation(
-                summary: 'Le tarif',
-                description: 'Permet de voir un tarif',
+                summary: 'Un tarif',
                 security: [['bearerAuth' => []]]
             )
         ),
         new Post(
             security: "is_granted('CREER', 'Tarif')",
-            processor: EntrepriseInjectionProcessor::class,
+            processor: TarifProcessor::class,
             openapi: new Operation(
-                summary: 'Création du tarif',
-                description: 'Permet de créer un tarif',
+                summary: 'Créer un tarif gare → gare',
                 security: [['bearerAuth' => []]]
             )
         ),
@@ -63,8 +67,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
             requirements: ['id' => '\d+'],
             processor: UpdatedbyProcessor::class,
             openapi: new Operation(
-                summary: 'Modification du tarif',
-                description: 'Permet de modifier un tarif',
+                summary: 'Modifier un tarif',
                 security: [['bearerAuth' => []]]
             )
         ),
@@ -76,7 +79,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
             processor: SoftDeleteProcessor::class,
             openapi: new Operation(
                 summary: 'Mise en corbeille du tarif',
-                description: 'Permet de mettre un tarif en corbeille',
                 security: [['bearerAuth' => []]]
             )
         ),
@@ -85,79 +87,63 @@ use Symfony\Component\Serializer\Attribute\Groups;
         security: [['bearerAuth' => []]]
     )
 )]
+#[ApiFilter(SearchFilter::class, properties: [
+    'garedepart.id' => 'exact',
+    'garearrivee.id' => 'exact'
+])]
+#[ApiFilter(OrderFilter::class, properties: ['id', 'montant', 'createdAt'])]
 class Tarif extends EntityBase implements EntrepriseOwnedInterface, HasSoftDeleteGuard
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['read:Tarif', 'read:Trajet', 'read:Voyage'])]
+    #[Groups(['read:Tarif'])]
     private ?int $id = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['read:Tarif', 'write:Tarif'])]
+    private ?Gare $garedepart = null;
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['read:Tarif', 'write:Tarif'])]
+    private ?Gare $garearrivee = null;
+
+    #[ORM\Column]
+    #[Groups(['read:Tarif', 'write:Tarif'])]
+    #[Assert\NotNull]
+    #[Assert\Positive(message: 'Le montant doit être strictement positif')]
+    private ?int $montant = null;
 
     #[ORM\Column(nullable: true)]
     private ?int $identreprise = null;
-
-    /**
-     * @var Collection<int, Trajet>
-     */
-    #[ORM\OneToMany(targetEntity: Trajet::class, mappedBy: 'tarif')]
-    private Collection $trajets;
-
-    #[ORM\Column]
-    #[Groups(['read:Tarif', 'write:Tarif', 'read:Trajet', 'read:Voyage'])]
-    private ?int $montant = null;
-
-    #[ORM\Column(length: 255)]
-    #[Groups(['read:Tarif', 'write:Tarif', 'read:Trajet', 'read:Voyage'])]
-    private ?string $libelle = null;
-
-    public function __construct()
-    {
-        $this->trajets = new ArrayCollection();
-    }
 
     public function getId(): ?int
     {
         return $this->id;
     }
 
-    public function getIdentreprise(): ?int
+    public function getGaredepart(): ?Gare
     {
-        return $this->identreprise;
+        return $this->garedepart;
     }
 
-    public function setIdentreprise(?int $identreprise): static
+    public function setGaredepart(?Gare $garedepart): static
     {
-        $this->identreprise = $identreprise;
+        $this->garedepart = $garedepart;
 
         return $this;
     }
 
-    /**
-     * @return Collection<int, Trajet>
-     */
-    public function getTrajets(): Collection
+    public function getGarearrivee(): ?Gare
     {
-        return $this->trajets;
+        return $this->garearrivee;
     }
 
-    public function addTrajet(Trajet $trajet): static
+    public function setGarearrivee(?Gare $garearrivee): static
     {
-        if (!$this->trajets->contains($trajet)) {
-            $this->trajets->add($trajet);
-            $trajet->setTarif($this);
-        }
-
-        return $this;
-    }
-
-    public function removeTrajet(Trajet $trajet): static
-    {
-        if ($this->trajets->removeElement($trajet)) {
-            // set the owning side to null (unless already changed)
-            if ($trajet->getTarif() === $this) {
-                $trajet->setTarif(null);
-            }
-        }
+        $this->garearrivee = $garearrivee;
 
         return $this;
     }
@@ -174,33 +160,20 @@ class Tarif extends EntityBase implements EntrepriseOwnedInterface, HasSoftDelet
         return $this;
     }
 
-    public function getSoftDeleteBlockers(): array
+    public function getIdentreprise(): ?int
     {
-        $errors = [];
-
-        $trajetsNotDeleted = $this->trajets->filter(
-            fn(Trajet $v) => $v->getDeletedAt() === null
-        );
-
-        if(!$trajetsNotDeleted->isEmpty()) {
-            $errors[] = sprintf(
-                'Le tarif est liée à %d trajets(s) actif(s).',
-                $trajetsNotDeleted->count()
-            );
-        }
-
-        return $errors;
+        return $this->identreprise;
     }
 
-    public function getLibelle(): ?string
+    public function setIdentreprise(?int $identreprise): static
     {
-        return $this->libelle;
-    }
-
-    public function setLibelle(string $libelle): static
-    {
-        $this->libelle = $libelle;
+        $this->identreprise = $identreprise;
 
         return $this;
+    }
+
+    public function getSoftDeleteBlockers(): array
+    {
+        return [];
     }
 }

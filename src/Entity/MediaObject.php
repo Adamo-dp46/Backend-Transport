@@ -5,7 +5,6 @@ namespace App\Entity;
 use ApiPlatform\Metadata\ApiProperty;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Get;
-use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\OpenApi\Model\Operation;
 use ApiPlatform\OpenApi\Model\RequestBody;
@@ -22,12 +21,12 @@ use Vich\UploaderBundle\Mapping\Attribute\UploadableField;
 #[ORM\Entity(repositoryClass: MediaObjectRepository::class)]
 #[Uploadable()]
 #[ApiResource(
+    security: "is_granted('IS_AUTHENTICATED_FULLY')",
     normalizationContext: ['groups' => ['media_object:read'], 'skip_null_values' => false],
     types: ['https://schema.org/MediaObject'],
     outputFormats: ['jsonld' => ['application/ld+json']],
     operations: [
         new Get(),
-        new GetCollection(),
         new Post(
             inputFormats: ['multipart' => ['multipart/form-data']],
             deserialize: false,

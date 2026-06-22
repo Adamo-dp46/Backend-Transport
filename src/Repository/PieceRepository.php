@@ -28,6 +28,18 @@ class PieceRepository extends ServiceEntityRepository
             ->getArrayResult();
     }
 
+    /** Valeur du stock (Σ stock × prix unitaire) + unités + nb pièces — snapshot courant. */
+    public function valeurStock(int $identreprise): array
+    {
+        return $this->createQueryBuilder('p')
+            ->select('COALESCE(SUM(p.stockinitial * p.prixunitaire), 0) AS valeur, COALESCE(SUM(p.stockinitial), 0) AS unites, COUNT(p.id) AS nbpieces')
+            ->andWhere('p.identreprise = :ide')
+            ->andWhere('p.deletedAt IS NULL')
+            ->setParameter('ide', $identreprise)
+            ->getQuery()
+            ->getSingleResult();
+    }
+
     //    /**
     //     * @return Piece[] Returns an array of Piece objects
     //     */

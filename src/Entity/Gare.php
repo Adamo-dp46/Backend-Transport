@@ -44,7 +44,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
             )
         ),
         new Get(
-            security: "is_granted('VOIR', object)",
+            security: "is_granted('VOIR', object) or is_granted('ROLE_USER')",
             requirements: ['id' => '\d+'],
             normalizationContext: ['groups' => ['read:Gare', 'read:Gare:item']],
             openapi: new Operation(
@@ -106,7 +106,7 @@ class Gare extends EntityBase implements EntrepriseOwnedInterface
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups(['read:Gare', 'read:User', 'read:Courrier'])]
+    #[Groups(['read:Gare', 'read:User', 'read:Courrier', 'read:Ligne', 'read:Ligne:item', 'read:Voyage', 'read:Ticket', 'read:Tarif', 'read:Bagage'])]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
@@ -116,12 +116,12 @@ class Gare extends EntityBase implements EntrepriseOwnedInterface
     private ?string $chefgare = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier', 'read:User'])]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier', 'read:User', 'read:Ligne', 'read:Ligne:item', 'read:Voyage', 'read:Ticket', 'read:Tarif', 'read:Bagage'])]
     #[Assert\Length(min: 2)]
     private ?string $ville = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier', 'read:User'])]
+    #[Groups(['read:Gare', 'write:Gare', 'read:Courrier', 'read:User', 'read:Ligne', 'read:Ligne:item', 'read:Voyage', 'read:Ticket', 'read:Tarif', 'read:Bagage'])]
     #[Assert\NotBlank]
     #[Assert\Length(min: 2)]
     private ?string $libelle = null;
@@ -166,7 +166,7 @@ class Gare extends EntityBase implements EntrepriseOwnedInterface
     private Collection $users;
 
     #[ORM\Column(nullable: true)]
-    #[Groups(['write:Gare'])]
+    #[Groups(['read:Gare', 'read:Gare:item', 'write:Gare'])]
     private ?\DateTimeImmutable $datecreation = null;
 
     public function __construct()

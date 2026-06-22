@@ -6,13 +6,15 @@ use ApiPlatform\Metadata\Operation;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\State\ProcessorInterface;
+use App\Entity\Gare;
 use App\Entity\User;
 use App\Entity\UserRole;
 use App\Repository\EntrepriseRepository;
-use App\Repository\GareRepository;
+use App\Security\UserManagementGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 class UserProcessor implements ProcessorInterface
@@ -23,7 +25,7 @@ class UserProcessor implements ProcessorInterface
         private UserPasswordHasherInterface $hasher,
         private Security $security,
         private EntrepriseRepository $entrepriseRepository,
-        private GareRepository $gareRepository
+        private UserManagementGuard $guard
     )
     {
     }
@@ -50,43 +52,65 @@ class UserProcessor implements ProcessorInterface
         }
 
         if($operation instanceof Post) {
+            if($this->em->getRepository(User::class)->findOneBy(['email' => $data->getEmail()])) { /*
+                - On contrôle l'unicité de l'email AVANT l'insert pour un message propre (au lieu d'une erreur SQL brute)
+            */
+                throw new ConflictHttpException('Cet email est déjà utilisé');
+            }
             $data->setEntreprise($entreprise); /*
                 - On lui affecte l'entreprise de l'utilisateur qui l'a crée
             */
+            // Un acteur rattaché à une gare et NON privilégié (admin de gare OU simple
+            // utilisateur de gare ayant les droits de gestion des users) est borné à SA gare :
+            // il ne peut créer que pour sa propre gare, et celle-ci est auto-affectée par défaut.
+            // (Admin/super entreprise et utilisateur central sans gare : libre choix de la gare.)
+            $estPrivilegie = in_array('ROLE_ADMIN', $currentUser->getRoles(), true)
+                || in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true);
+            $gareActeur = $currentUser->getGare();
+
             if($data->getGare() !== null) {
-                $gare = $this->gareRepository->find($data->getGare()->getId());
-                if($gare) {
-                    if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true) && $currentUser->getGare()?->getId() !== $gare->getId()) {
-                        throw new AccessDeniedHttpException('Vous ne pouvez créer des utilisateurs que pour votre propre gare.');
-                    }
-                    $data->setGare($gare);
+                /**
+                 * @var Gare $gare
+                 */
+                $gare = $data->getGare();
+                if(!$estPrivilegie && $gareActeur !== null && $gareActeur->getId() !== $gare->getId()) {
+                    throw new AccessDeniedHttpException('Vous ne pouvez créer des utilisateurs que pour votre propre gare.');
                 }
-            } elseif(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true)) {
-                $data->setGare($currentUser->getGare()); /*
-                    - On.. auto affectation si l'administrateur de la gare ne précise pas de gare
+                $data->setGare($gare);
+            } elseif(!$estPrivilegie && $gareActeur !== null) {
+                $data->setGare($gareActeur); /*
+                    - Auto-affectation de la gare de l'acteur s'il n'en précise pas (champ masqué côté front)
                 */
             }
         }
 
         if($operation instanceof Patch) {
-            if(in_array('ROLE_ADMIN', $data->getRoles(), true) && !in_array('ROLE_ADMIN', $currentUser->getRoles(), true)
-            ) {
-                throw new AccessDeniedHttpException('Vous n\'êtes pas autorisé à modifier l\'administrateur'); /*
-                    - On empêche la modification de l'admin par un non admin
-                */
+            /**
+             * @var User|null $previous
+             * - On s'appuie sur l'état AVANT dénormalisation (rôles/gare réels de la cible), car '$data'
+             *   reflète déjà le payload (un acteur pourrait y glisser une autre gare/rôle).
+             */
+            $previous = $context['previous_data'] ?? null;
+            if(!$previous instanceof User) {
+                throw new AccessDeniedHttpException('Modification impossible');
             }
 
-            if($data->isFounder() && !$currentUser->isFounder()) {
-                throw new AccessDeniedHttpException('Seul le fondateur peut modifier son propre compte');
+            // Règles d'autorisation centralisées (hiérarchie + périmètre gare + auto-modification)
+            $this->guard->assertCanManage($currentUser, $previous);
+
+            if($data->getEmail() !== $previous->getEmail()
+                && $this->em->getRepository(User::class)->findOneBy(['email' => $data->getEmail()])) { /*
+                - Email changé vers un email déjà pris → message propre au lieu d'une erreur SQL
+            */
+                throw new ConflictHttpException('Cet email est déjà utilisé');
             }
 
-            if(in_array('ROLE_ADMIN_GARE', $currentUser->getRoles(), true)) {
-                if($data->getGare()?->getId() !== $currentUser->getGare()?->getId()) {
-                    throw new AccessDeniedHttpException('Vous ne pouvez modifier que les utilisateurs de votre gare.'); /*
-                        - Un administrateur de gare ne peut pas modifier un utilisateur d'une autre gare
-                    */
-                }
-                $data->setGare($currentUser->getGare());
+            // Un acteur rattaché à une gare (non admin) ne peut pas changer la gare de l'utilisateur : on la fige.
+            // (Un admin/super ou un utilisateur central sans gare peut réaffecter la gare.)
+            $estPrivilegie = in_array('ROLE_ADMIN', $currentUser->getRoles(), true)
+                || in_array('ROLE_SUPER_ADMIN', $currentUser->getRoles(), true);
+            if(!$estPrivilegie && $currentUser->getGare() !== null) {
+                $data->setGare($previous->getGare());
             }
 
             $existingRoles = $this->em->getRepository(UserRole::class)->findBy([

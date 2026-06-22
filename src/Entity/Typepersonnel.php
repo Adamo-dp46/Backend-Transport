@@ -34,7 +34,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Typepersonnel') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Typepersonnel') or is_granted('VOIR', 'Personnel')",
             openapi: new Operation(
                 summary: 'Liste des types de personnel',
                 description: 'Permet de voir la liste des types de personnel',

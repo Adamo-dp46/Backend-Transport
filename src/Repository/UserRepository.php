@@ -95,6 +95,20 @@ class UserRepository extends ServiceEntityRepository implements PasswordUpgrader
             ->getArrayResult();
     }
 
+    /** Nombre d'agents ACTIFS rattachés à chaque gare (headcount courant, pas de période). */
+    public function countActifsParGare(int $identreprise): array
+    {
+        return $this->createQueryBuilder('u')
+            ->select('IDENTITY(u.gare) AS gareid, COUNT(u.id) AS nb')
+            ->andWhere('u.entreprise = :ide')
+            ->andWhere('u.gare IS NOT NULL')
+            ->andWhere("u.statut = 'ACTIF'")
+            ->setParameter('ide', $identreprise)
+            ->groupBy('u.gare')
+            ->getQuery()
+            ->getArrayResult();
+    }
+
     //    /**
     //     * @return User[] Returns an array of User objects
     //     */

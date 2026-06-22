@@ -9,6 +9,7 @@ use App\Entity\Courrier;
 use App\Entity\Depannage;
 use App\Entity\Fournisseur;
 use App\Entity\Gare;
+use App\Entity\Ligne;
 use App\Entity\Marque;
 use App\Entity\Marquepiece;
 use App\Entity\Model;
@@ -20,7 +21,6 @@ use App\Entity\Tarif;
 use App\Entity\Tarifbagage;
 use App\Entity\Tarifcourrier;
 use App\Entity\Ticket;
-use App\Entity\Trajet;
 use App\Entity\Typepersonnel;
 use App\Entity\Typepiece;
 use App\Entity\Typevehicule;
@@ -37,6 +37,7 @@ class CorbeilleRegistry
         'depannage' => Depannage::class,
         'fournisseur' => Fournisseur::class,
         'gare' => Gare::class,
+        'ligne' => Ligne::class,
         'marque' => Marque::class,
         'marquepiece' => Marquepiece::class,
         'model' => Model::class,
@@ -48,7 +49,6 @@ class CorbeilleRegistry
         'tarifcourrier' => Tarifcourrier::class,
         'tarif' => Tarif::class,
         'ticket' => Ticket::class,
-        'trajet' => Trajet::class,
         'typepersonnel' => Typepersonnel::class,
         'typepiece' => Typepiece::class,
         'typevehicule' => Typevehicule::class,

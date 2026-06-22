@@ -17,6 +17,7 @@ use App\Entity\Dto\ApprovisionnementInput;
 use App\Entity\Interface\EntrepriseOwnedInterface;
 use App\Entity\Interface\HasLockGuard;
 use App\Repository\ApprovisionnementRepository;
+use App\State\AnnulerApprovisionnementProcessor;
 use App\State\ApprovisionnementProcessor;
 use App\State\SoftDeleteProcessor;
 use App\State\VerrouillerApprovisionnementProcessor;
@@ -35,7 +36,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Approvisionnement') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Approvisionnement')",
             openapi: new Operation(
                 summary: 'La liste des approvisionnements',
                 description: 'Permet de voir la liste des approvisionnements',
@@ -103,7 +104,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
             requirements: ['id' => '\d+'],
             input: ApprovisionnementInput::class,
             processor: ApprovisionnementProcessor::class, /*
-                - Lorsqu'on modifie un approvisionnement, on récupère ses anciens détails dépannage, annule leur impact stock dans inventaire et on supprime et crée de nouveaux détails ainsi que les mouvements stock vu que le stock est modifié lors de la création
+                - Lorsqu'on modifie un approvisionnement, on réconcilie ses détails par différence (clé = pièce) : on ne génère dans l'inventaire que les mouvements réellement nécessaires (pièce ajoutée/retirée ou delta de quantité), une pièce inchangée ne crée aucun mouvement
             */
             denormalizationContext: ['groups' => ['write:ApprovisionnementInput']],
             openapi: new Operation(
@@ -112,6 +113,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
                 security: [['bearerAuth' => []]]
             )
         ),
+        /* -- Verrouiller désactivé (remplacé par l'approche statut / annulation) — réactivable :
         new Patch(
             security: "is_granted('MODIFIER', object)",
             uriTemplate: '/approvisionnements/{id}/verrouiller',
@@ -120,6 +122,19 @@ use Symfony\Component\Serializer\Attribute\Groups;
             processor: VerrouillerApprovisionnementProcessor::class,
             openapi: new Operation(
                 summary: 'Permet de verrouiller ou déverrouiller un approvisionnement',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        */
+        new Patch(
+            security: "is_granted('MODIFIER', object)",
+            uriTemplate: '/approvisionnements/{id}/annuler',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: AnnulerApprovisionnementProcessor::class,
+            openapi: new Operation(
+                summary: 'Annuler un approvisionnement',
+                description: 'Annule un approvisionnement non verrouillé : retire du stock les pièces entrées (SORTIE) et passe le statut à ANNULE. Refusé si une pièce a déjà été consommée (stock insuffisant). Reste visible mais exclu des coûts.',
                 security: [['bearerAuth' => []]]
             )
         ),
@@ -181,6 +196,10 @@ class Approvisionnement extends EntityBase implements EntrepriseOwnedInterface, 
     #[ORM\Column(nullable: true)]
     #[Groups(['read:Approvisionnement'])]
     private ?bool $verrouille = false;
+
+    #[ORM\Column(length: 20, options: ['default' => 'VALIDE'])]
+    #[Groups(['read:Approvisionnement'])]
+    private string $statut = 'VALIDE'; // VALIDE | ANNULE (cf. App\Domain\Enum\ApprovisionnementStatus)
 
     public function __construct()
     {
@@ -266,6 +285,18 @@ class Approvisionnement extends EntityBase implements EntrepriseOwnedInterface, 
     public function setVerrouille(?bool $verrouille): static
     {
         $this->verrouille = $verrouille;
+
+        return $this;
+    }
+
+    public function getStatut(): string
+    {
+        return $this->statut;
+    }
+
+    public function setStatut(string $statut): static
+    {
+        $this->statut = $statut;
 
         return $this;
     }

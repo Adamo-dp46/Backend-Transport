@@ -38,7 +38,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Fournisseur') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Fournisseur') or is_granted('VOIR', 'Approvisionnement')",
             openapi: new Operation(
                 summary: 'La liste des fournisseurs',
                 description: 'Permet de voir la liste des fournisseurs',

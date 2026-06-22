@@ -34,7 +34,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-           security: "is_granted('VOIR', 'Marque') or is_granted('ROLE_USER')",
+           security: "is_granted('VOIR', 'Marque') or is_granted('VOIR', 'Car')",
             openapi: new Operation(
                 summary: 'Liste des marques',
                 description: 'Permet de voir la liste des marques',

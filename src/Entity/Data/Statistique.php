@@ -14,9 +14,9 @@ use App\Entity\Output\Exploitation\ExploitationStatistiqueOutput;
 use App\Entity\Output\Financier\FinancierStatistiqueOutput;
 use App\Entity\Output\Flotte\FlotteStatistiqueOutput;
 use App\Entity\Output\FlotteActivity\FlotteActiviteOutput;
+use App\Entity\Output\Ligne\LigneStatistiqueOutput;
 use App\Entity\Output\Personnel\PersonnelStatistiqueOutput;
 use App\Entity\Output\Stock\StockStatistiqueOutput;
-use App\Entity\Output\Trajet\TrajetStatistiqueOutput;
 use App\State\AgentStatsProvider;
 use App\State\BagageStatsProvider;
 use App\State\BilleterieStatsProvider;
@@ -26,9 +26,9 @@ use App\State\ExploitationStatsProvider;
 use App\State\FinancierStatsProvider;
 use App\State\FlotteActiviteStatsProvider;
 use App\State\FlotteStatsProvider;
+use App\State\LigneStatsProvider;
 use App\State\PersonnelStatsProvider;
 use App\State\StockStatsProvider;
-use App\State\TrajetStatsProvider;
 
 #[ApiResource(
     security: "is_granted('IS_AUTHENTICATED_FULLY')",
@@ -119,11 +119,13 @@ use App\State\TrajetStatsProvider;
             )
         ),
         new Get(
-            uriTemplate: '/stats/trajet/performance',
-            provider: TrajetStatsProvider::class,
+            uriTemplate: '/stats/ligne/performance',
+            provider: LigneStatsProvider::class,
             input: false,
-            output: TrajetStatistiqueOutput::class,
+            output: LigneStatistiqueOutput::class,
             openapi: new Operation(
+                summary: 'Performance par ligne',
+                description: 'Recette, nombre de voyages et de tickets agrégés par ligne (remplace /stats/trajet/performance)',
                 security: [['bearerAuth' => []]]
             )
         ),

@@ -16,12 +16,14 @@ use ApiPlatform\OpenApi\Model\RequestBody;
 use App\Domain\Enum\CourrierStatus;
 use App\Entity\Dto\CourrierInput;
 use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Entity\Interface\MultiGareScopedInterface;
 use App\Repository\CourrierRepository;
 use App\State\AnnulerCourrierProcessor;
 use App\State\CourrierProcessor;
 use App\State\CourrierStatutProcessor;
 use App\State\LivrerCourrierProcessor;
 use App\State\PerduCourrierProcessor;
+use App\State\ReceptionnerCourrierProcessor;
 use App\State\SoftDeleteProcessor;
 use ArrayObject;
 use Doctrine\Common\Collections\ArrayCollection;
@@ -39,7 +41,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     order: ['createdAt' => 'DESC'],
     operations: [
         new GetCollection(
-            security: "is_granted('VOIR', 'Courrier') or is_granted('ROLE_USER')",
+            security: "is_granted('VOIR', 'Courrier')",
             openapi: new Operation(
                 summary: 'Liste des courriers',
                 description: 'Permet de voir la liste des courriers',
@@ -116,6 +118,18 @@ use Symfony\Component\Serializer\Attribute\Groups;
         ),
         new Patch(
             security: "is_granted('MODIFIER', object)",
+            uriTemplate: '/courriers/{id}/receptionner',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: ReceptionnerCourrierProcessor::class,
+            openapi: new Operation(
+                summary: 'Réceptionner un courrier à sa gare d\'arrivée',
+                description: 'Accusé de réception « à l\'arrêt » : EN_TRANSIT -> RECEPTIONNE, par l\'agent de la gare d\'arrivée du colis',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
+            security: "is_granted('MODIFIER', object)",
             uriTemplate: '/courriers/{id}/livrer',
             requirements: ['id' => '\d+'],
             input: false,
@@ -184,8 +198,13 @@ use Symfony\Component\Serializer\Attribute\Groups;
     'createdAt'
 ])]
 #[ApiFilter(DateFilter::class, properties: ['createdAt'])]
-class Courrier extends EntityBase implements EntrepriseOwnedInterface
+class Courrier extends EntityBase implements EntrepriseOwnedInterface, MultiGareScopedInterface
 {
+    public static function gareScopeFields(): array
+    {
+        return ['garedepart', 'garearrivee'];
+    }
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -213,12 +232,13 @@ class Courrier extends EntityBase implements EntrepriseOwnedInterface
     private ?string $contactdestinataire = null;
 
     #[ORM\ManyToOne(inversedBy: 'courriers')]
-    #[ORM\JoinColumn(nullable: false)]
+    #[ORM\JoinColumn(nullable: true)]
     #[Groups(['read:Courrier'])]
     private ?Gare $garedepart = null;
 
-    #[ORM\ManyToOne(inversedBy: 'courriers')]
-    #[ORM\JoinColumn(nullable: false)]
+    // Unidirectionnel : Gare::$courriers ne suit que les départs (mappedBy garedepart)
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: true)]
     #[Groups(['read:Courrier'])]
     private ?Gare $garearrivee = null;
 
@@ -230,7 +250,7 @@ class Courrier extends EntityBase implements EntrepriseOwnedInterface
     #[Groups(['read:Courrier', 'write:Courrier'])]
     private ?int $fraissuivi = null;
 
-    #[ORM\Column]
+    #[ORM\Column(type: 'bigint')] // BIGINT : somme des taxes des colis
     #[Groups(['read:Courrier', 'read:Voyage'])]
     private ?int $montant = null;
 
@@ -258,6 +278,10 @@ class Courrier extends EntityBase implements EntrepriseOwnedInterface
 
     #[ORM\Column(nullable: true)]
     private ?\DateTimeImmutable $datepaiement = null;
+
+    #[ORM\Column(nullable: true)]
+    #[Groups(['read:Courrier'])]
+    private ?\DateTimeImmutable $datelivraison = null; // Renseignée à la livraison (LivrerCourrierProcessor) → délai exact
 
     public function __construct()
     {
@@ -475,6 +499,18 @@ class Courrier extends EntityBase implements EntrepriseOwnedInterface
     public function setDatepaiement(?\DateTimeImmutable $datepaiement): static
     {
         $this->datepaiement = $datepaiement;
+
+        return $this;
+    }
+
+    public function getDatelivraison(): ?\DateTimeImmutable
+    {
+        return $this->datelivraison;
+    }
+
+    public function setDatelivraison(?\DateTimeImmutable $datelivraison): static
+    {
+        $this->datelivraison = $datelivraison;
 
         return $this;
     }

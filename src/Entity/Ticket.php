@@ -11,20 +11,22 @@ use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\OpenApi\Model\Operation;
+use App\Entity\Dto\DesistementInput;
 use App\Entity\Interface\EntrepriseOwnedInterface;
+use App\Entity\Interface\LigneGareScopedInterface;
 use App\Repository\TicketRepository;
+use App\State\DesistementProcessor;
 use App\State\SoftDeleteProcessor;
 use App\State\TicketProcessor;
 use App\State\UpdatedbyProcessor;
-use App\Validator\UniquePerEntreprise;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: TicketRepository::class)]
-#[UniquePerEntreprise(
-    fields: ['voyage', 'siege'],
-    message: 'Le ticket est déjà payé pour le voyage'
-)]
+/*
+    - Plus d'unicité (voyage, siege) : un siège peut porter plusieurs tickets sur le même voyage
+      tant que leurs tronçons [montée, descente) ne se chevauchent pas (cf. TicketProcessor).
+*/
 #[ApiResource(
     security: "is_granted('IS_AUTHENTICATED_FULLY')",
     normalizationContext: ['groups' => ['read:Ticket', 'read:Base'], 'skip_null_values' => false],
@@ -42,7 +44,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
             )
         ),
         new Get(
-            security: "is_granted('VOIR', object)",
+            security: "is_granted('VOIR', object) or is_granted('ROLE_USER')",
             requirements: ['id' => '\d+'],
             openapi: new Operation(
                 summary: 'Le ticket',
@@ -82,6 +84,19 @@ use Symfony\Component\Serializer\Attribute\Groups;
                 security: [['bearerAuth' => []]]
             )
         ),
+        new Patch(
+            security: "is_granted('MODIFIER', object)",
+            uriTemplate: '/tickets/{id}/desister',
+            requirements: ['id' => '\d+'],
+            input: DesistementInput::class,
+            processor: DesistementProcessor::class,
+            denormalizationContext: ['groups' => ['write:DesistementInput']],
+            openapi: new Operation(
+                summary: 'Désistement d\'un billet (report ou annulation)',
+                description: 'Libère le siège du billet d\'origine. Mode REPORT : crée un nouveau billet sur un voyage de la même ligne (tronçon et prix conservés). Mode ANNULATION : annule et rembourse le billet.',
+                security: [['bearerAuth' => []]]
+            )
+        ),
     ],
     openapi: new Operation(
         security: [['bearerAuth' => []]]
@@ -92,6 +107,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
     'voyage.id' => 'exact', /*
         - Le filtre exact sur la relation '?voyage=/api/voyages/5' mais on peut s'en passer vu qu'on a le 'read:Ticket'
     */
+    'statut' => 'exact', // VALIDE | REPORTE | ANNULE — pour filtrer l'historique des désistements
 ])]
 #[ApiFilter(OrderFilter::class, properties: [
     'id',
@@ -99,8 +115,13 @@ use Symfony\Component\Serializer\Attribute\Groups;
     'prix',
     'createdAt'
 ])]
-class Ticket extends EntityBase implements EntrepriseOwnedInterface
+class Ticket extends EntityBase implements EntrepriseOwnedInterface, LigneGareScopedInterface
 {
+    public static function ligneScopePath(): array
+    {
+        return ['voyage', 'ligne']; // billetterie : tickets des voyages dont la ligne dessert sa gare
+    }
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -139,7 +160,49 @@ class Ticket extends EntityBase implements EntrepriseOwnedInterface
     #[ORM\ManyToOne(inversedBy: 'tickets')]
     #[ORM\JoinColumn(nullable: false)]
     #[Groups(['read:Ticket', 'read:Voyage', 'write:Ticket'])]
-    private ?Gare $gare = null;
+    private ?Gare $gare = null; // Gare de MONTÉE / émission, on peut le déduire de la gare de l'utilisateur
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['read:Ticket', 'read:Voyage', 'write:Ticket'])]
+    private ?Gare $garedescente = null; // Gare de DESCENTE — fixe le prix via la grille globale Tarif(gare, garedescente)
+
+    #[ORM\Column(options: ['default' => 0])]
+    #[Groups(['read:Ticket', 'read:Voyage'])]
+    private int $remise = 0; // Montant déduit (FCFA), calculé par le processor ; prix = tarif - remise
+
+    #[ORM\ManyToOne]
+    #[Groups(['read:Ticket', 'read:Voyage', 'write:Ticket'])]
+    private ?Beneficiaire $beneficiaire = null; // Bénéficiaire de la remise (obligatoire si remise > 0)
+
+    // -- Désistement (report / annulation) -- //
+
+    #[ORM\Column(length: 20, options: ['default' => 'VALIDE'])]
+    #[Groups(['read:Ticket', 'read:Voyage'])]
+    private string $statut = 'VALIDE'; // VALIDE | REPORTE | ANNULE (cf. App\Domain\Enum\TicketStatus)
+
+    #[ORM\ManyToOne]
+    #[ORM\JoinColumn(nullable: true)] // Renseigné sur le billet issu d'un REPORT : pointe vers le billet désisté
+    #[Groups(['read:Ticket'])]
+    private ?Ticket $ticketOrigine = null;
+
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    #[Groups(['read:Ticket'])]
+    private ?\DateTimeImmutable $datedesistement = null; // Horodatage du report/annulation
+
+    #[ORM\Column(length: 255, nullable: true)]
+    #[Groups(['read:Ticket'])]
+    private ?string $motifdesistement = null;
+
+    /*
+        - Entrées TRANSITOIRES (non persistées) : l'agent saisit un type + une valeur,
+          le TicketProcessor calcule le montant de la remise et le prix net.
+    */
+    #[Groups(['write:Ticket'])]
+    private ?string $remisetype = null; // 'MONTANT' | 'POURCENTAGE'
+
+    #[Groups(['write:Ticket'])]
+    private ?int $remisevaleur = null; // montant en FCFA, ou pourcentage selon remisetype
 
     public function getId(): ?int
     {
@@ -238,6 +301,114 @@ class Ticket extends EntityBase implements EntrepriseOwnedInterface
     public function setGare(?Gare $gare): static
     {
         $this->gare = $gare;
+
+        return $this;
+    }
+
+    public function getGaredescente(): ?Gare
+    {
+        return $this->garedescente;
+    }
+
+    public function setGaredescente(?Gare $garedescente): static
+    {
+        $this->garedescente = $garedescente;
+
+        return $this;
+    }
+
+    public function getRemise(): int
+    {
+        return $this->remise;
+    }
+
+    public function setRemise(int $remise): static
+    {
+        $this->remise = $remise;
+
+        return $this;
+    }
+
+    public function getBeneficiaire(): ?Beneficiaire
+    {
+        return $this->beneficiaire;
+    }
+
+    public function setBeneficiaire(?Beneficiaire $beneficiaire): static
+    {
+        $this->beneficiaire = $beneficiaire;
+
+        return $this;
+    }
+
+    public function getRemisetype(): ?string
+    {
+        return $this->remisetype;
+    }
+
+    public function setRemisetype(?string $remisetype): static
+    {
+        $this->remisetype = $remisetype;
+
+        return $this;
+    }
+
+    public function getRemisevaleur(): ?int
+    {
+        return $this->remisevaleur;
+    }
+
+    public function setRemisevaleur(?int $remisevaleur): static
+    {
+        $this->remisevaleur = $remisevaleur;
+
+        return $this;
+    }
+
+    public function getStatut(): string
+    {
+        return $this->statut;
+    }
+
+    public function setStatut(string $statut): static
+    {
+        $this->statut = $statut;
+
+        return $this;
+    }
+
+    public function getTicketOrigine(): ?Ticket
+    {
+        return $this->ticketOrigine;
+    }
+
+    public function setTicketOrigine(?Ticket $ticketOrigine): static
+    {
+        $this->ticketOrigine = $ticketOrigine;
+
+        return $this;
+    }
+
+    public function getDatedesistement(): ?\DateTimeImmutable
+    {
+        return $this->datedesistement;
+    }
+
+    public function setDatedesistement(?\DateTimeImmutable $datedesistement): static
+    {
+        $this->datedesistement = $datedesistement;
+
+        return $this;
+    }
+
+    public function getMotifdesistement(): ?string
+    {
+        return $this->motifdesistement;
+    }
+
+    public function setMotifdesistement(?string $motifdesistement): static
+    {
+        $this->motifdesistement = $motifdesistement;
 
         return $this;
     }

@@ -20,6 +20,7 @@ use App\Entity\Interface\EntrepriseOwnedInterface;
 use App\Filter\PersonnelFilter;
 use App\Repository\DepannageRepository;
 use App\State\AffectpersonnelProcessor;
+use App\State\AnnulerDepannageProcessor;
 use App\State\CloturerDepannageProcessor;
 use App\State\DepannageProcessor;
 use App\State\SoftDeleteProcessor;
@@ -156,6 +157,18 @@ use Symfony\Component\Serializer\Attribute\Groups;
             )
         ),
         new Patch(
+            security: "is_granted('MODIFIER', object)",
+            uriTemplate: '/depannages/{id}/annuler',
+            requirements: ['id' => '\d+'],
+            input: false,
+            processor: AnnulerDepannageProcessor::class,
+            openapi: new Operation(
+                summary: 'Annuler un dépannage',
+                description: 'Annule un dépannage EN COURS : restaure le stock (ENTREE des pièces), remet le véhicule disponible et passe le statut à ANNULE. Le dépannage reste visible mais est exclu des coûts.',
+                security: [['bearerAuth' => []]]
+            )
+        ),
+        new Patch(
             security: "is_granted('SUPPRIMER', object)",
             uriTemplate: '/depannages/{id}/remove',
             requirements: ['id' => '\d+'],
@@ -229,7 +242,7 @@ class Depannage extends EntityBase implements EntrepriseOwnedInterface
     #[Groups(['read:Depannage'])]
     private ?Car $car = null;
 
-    #[ORM\Column(nullable: true)]
+    #[ORM\Column(type: 'bigint', nullable: true)] // BIGINT : le coût total (somme des pièces) peut dépasser la limite INT (~2,1 milliards) en FCFA
     #[Groups(['read:Depannage'])]
     private ?int $couttotal = null;
 

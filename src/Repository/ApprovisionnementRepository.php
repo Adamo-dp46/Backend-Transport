@@ -17,6 +17,8 @@ class ApprovisionnementRepository extends ServiceEntityRepository
     }
 
     // -- Statistiques -- //
+    // Pilotées par le STATUT métier : un approvisionnement ANNULE (stock retiré) est exclu des coûts mais reste
+    // visible pour l'audit ; la corbeille ('deletedAt') ne gère que la visibilité dans les listes.
 
     public function coutTotal(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): float
     {
@@ -26,6 +28,7 @@ class ApprovisionnementRepository extends ServiceEntityRepository
             ->andWhere('a.identreprise = :ide')
             ->andWhere('a.dateappro >= :debut')
             ->andWhere('a.dateappro <= :fin')
+            ->andWhere("a.statut != 'ANNULE'") // exclut les approvisionnements annulés des coûts
             ->setParameter('ide', $identreprise)
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
@@ -33,6 +36,26 @@ class ApprovisionnementRepository extends ServiceEntityRepository
             ->getSingleResult();
 
         return round((float)($row['total'] ?? 0), 2);
+    }
+
+    /** Achats par fournisseur (appros non annulés de la période) : nb d'appros + montant total. */
+    public function achatsParFournisseur(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
+    {
+        return $this->createQueryBuilder('a')
+            ->select('f.id AS id, f.libelle AS libelle, COUNT(DISTINCT a.id) AS nbappros, COALESCE(SUM(da.couttotal), 0) AS montant')
+            ->join('a.detailapprovisionnements', 'da')
+            ->join('a.fournisseur', 'f')
+            ->andWhere('a.identreprise = :ide')
+            ->andWhere('a.dateappro >= :debut')
+            ->andWhere('a.dateappro <= :fin')
+            ->andWhere("a.statut != 'ANNULE'")
+            ->setParameter('ide', $identreprise)
+            ->setParameter('debut', $debut)
+            ->setParameter('fin', $fin)
+            ->groupBy('f.id')
+            ->orderBy('montant', 'DESC')
+            ->getQuery()
+            ->getArrayResult();
     }
 
     public function coutParJour(\DateTimeImmutable $debut, \DateTimeImmutable $fin, int $identreprise): array
@@ -43,6 +66,7 @@ class ApprovisionnementRepository extends ServiceEntityRepository
             ->andWhere('a.identreprise = :ide')
             ->andWhere('a.dateappro >= :debut')
             ->andWhere('a.dateappro <= :fin')
+            ->andWhere("a.statut != 'ANNULE'") // exclut les approvisionnements annulés des coûts
             ->setParameter('ide', $identreprise)
             ->setParameter('debut', $debut)
             ->setParameter('fin', $fin)
